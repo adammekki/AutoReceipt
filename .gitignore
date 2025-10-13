@@ -2,5 +2,8 @@ venv/
 .env
 __pycache__/
 *.pyc
-test_receipt.jpeg
-test_receipt2.jpeg
+Receipt_Flight1.pdf
+Receipt_Flight2.pdf
+Receipt_Flight3.pdf
+Receipt_Parking.pdf
+Reisekostenabrechnung_28_05_2024.pdf
