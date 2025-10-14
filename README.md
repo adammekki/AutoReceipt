@@ -75,6 +75,21 @@ This file can be reviewed and directly submitted to the university’s finance d
 ## 🔒 Security & Privacy
 - No user data or receipts are uploaded or stored externally
 
+## 🛠️ Current Work in Progress
+
+The project is actively under development. Current focus areas include:
+
+1. **Complete Information Extraction & PDF Filling**  
+   - Extending the AI extraction to cover **all fields in the university’s Reisekostenabrechnung form**, including outbound and return trips, accommodations, and miscellaneous expenses.  
+   - Ensuring **accurate mapping** from extracted JSON to all PDF fields for fully automated form completion.
+
+2. **User Interface (UI) Development**  
+   - Building a **user-friendly interface** that allows users to easily upload receipts (PDFs or images).  
+   - Providing **real-time feedback** on extracted data and letting users review before generating the final PDF.  
+   - Designing the UI to support both **desktop and web-based usage**, making the app accessible to a wide range of users.
+
+These improvements aim to make the app a **complete end-to-end solution** for academic travel expense reporting, minimizing manual effort and errors.
+
 ## 👩‍💻 Author
 Project by: [Adam Mekki]
 Goal: Automate and simplify academic travel reimbursement using AI and PDF automation.
