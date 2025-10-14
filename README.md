@@ -91,5 +91,5 @@ The project is actively under development. Current focus areas include:
 These improvements aim to make the app a **complete end-to-end solution** for academic travel expense reporting, minimizing manual effort and errors.
 
 ## 👩‍💻 Author
-- Project by: [**Adam Mekki**]
+- Project by: **Adam Mekki**
 - Goal: Automate and simplify academic travel reimbursement using AI and PDF automation.
