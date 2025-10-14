@@ -5,6 +5,7 @@ from PIL import Image
 import io
 import json
 from pdf2image import convert_from_path # This will be used for PDF to image conversion
+from fillpdf import fillpdfs
 
 # --- Configuration and Setup (remains the same) ---
 load_dotenv()
@@ -104,28 +105,28 @@ if __name__ == "__main__":
 
     # Your Gemini prompt (as refined in previous steps)
     multi_doc_prompt = """
-    You are an expert at extracting travel expense details from receipts. You will be provided with one or more document images (converted from original images or PDF pages). For each document, extract the following information and return it as a JSON object within a list. The JSON keys MUST exactly match the specified field names below. If a field cannot be found or is not applicable for a specific receipt, return its value as null for that receipt. For amounts, extract the numerical value followed by the currency symbol.
+    You are an expert at extracting travel expense details from receipts. You will be provided with one or more document images (converted from original images or PDF pages). For each document, extract the following information and return it as a JSON object within a list. The JSON keys MUST exactly match the specified field names below. If a field cannot be found or is not applicable for a specific receipt, return its value as null for that receipt. For amounts, extract the numerical value followed by the currency symbol. If there are several documents, infer the data that is likely to be connected and merge them together into one output. Instead of using None, use empty string
 
     Output format: A JSON list where each element is a JSON object representing one receipt's extracted data.
 
-    Required Fields for EACH receipt:
+    Required Fields for the receipt:
     - Hinreise_von: (Origin city/location of the outbound journey, e.g., "Blaustein-Arnegg")
     - Hinreise_nach: (Destination city/location of the outbound journey, e.g., "Bangkok")
     - Hinreise_Beginn: (Start date of the outbound journey, format: DD.MM.YYYY, e.g., "12.12.2024")
     - Hinreise_Uhrzeit: (Start time of the outbound journey, format: HH:MM, e.g., "17:00")
-    - Hinreise_Ort: (Specific location of departure, e.g., "Wohnung", "Büro")
+    - Hinreise_Ort: (Specific location of departure, either 'Wohnung', 'Dienststelle')
     - Hinreise_Urlaubsort: (If the outbound journey ends at a vacation spot before the official trip, otherwise null)
     - Verkehrsmittel Hinreise: (Primary mode of transport for the outbound journey, e.g., "Flugzeug", "Bahn", "Eigenes_KfZ", "Fahrgemeinschaft", "Bus_Bahn_Strassenbahn", "Schiff", "Sonstiges")
-    - Klasse Hinreise: (Class of travel if applicable, eg., "Economy", "Business", "1. Klasse", "2. Klasse". If not specified, null.)
-    - Flugzeug_Hinreise: (Cost for air travel on the outbound journey. Extract numerical value followed by currency symbol, e.g., "1434,62€")
+    - Klasse Hinreise: (Class of travel if applicable, either 'Klasse 2', 'Klasse 1'. If not specified, null.)
+    - Flugzeug_Hinreise: (Cost for air travel on the outbound journey. Extract numerical value followed by currency symbol, e.g., "1434,62€". This can not be left null)
     - Bahn_1u2_Klasse_Hinreise: (Cost for train travel on the outbound journey, including class details. Extract numerical value followed by currency symbol, e.g., "55,00€" or "1. Klasse")
     - Eigenes_KfZ_Hinreise: (Details for personal car usage on the outbound journey. Extract distance in km and any parking notes, e.g., "174km Parken Freising")
     - Dienstwagen_Hinreise: (Details for company car usage on the outbound journey, if applicable. Otherwise null.)
     - Fahrgemeinschaft Hinreise: (If part of a carpool for the outbound journey, state "Fahrgemeinschaft". Otherwise null.)
     - Sonstiges_Hinreise: (Any other relevant notes or costs for the outbound journey not covered by specific transport fields, e.g., "(Hin- und Rückflug)", "Taxi 25€")
-    - Bus_Bahn_Strassenbahn_Hinreise: (Cost for bus, tram, or local train travel on the outbound journey. Extract numerical value followed by currency symbol and any notes, e.g., "55,00€ (Parken)")
-    - \\u00fe\\u00ff\\u0000p\\u0000l\\u0000a\\\u0000n\\\u0000m\\\u0000\\u00e4\\u0000\\u00df\\u0000i\\u0000g\\u0000e\\u0000_\\u0000A\\u0000b\\u0000f\\u0000a\\u0000h\\u0000r\\u0000t: (If the outbound journey's departure was scheduled/on time, otherwise null)
-    - \\u00fe\\u00ff\\u0000S\\u0000c\\u0000h\\u0000w\\u0000e\\u0000r\\u00b\\u0000e\\u0000s\\u0000c\\u0000h\\u0000\\u00e4\\u0000d\\u0000i\\u0000g\\u0000t\\u0000 \\u0000H\\u0000i\\u0000n\\u0000r\\u0000e\\u0000i\\u0000s\\u0000e: (If the traveler is severely disabled for the outbound journey, otherwise null)
+    - Bus_Bahn_Strassenbahn_Hinreise: (Cost for bus, tram, or local train travel on the outbound journey. Extract numerical value followed by currency symbol and any notes, e.g., "55,00€ (Parken)", do not put the flight cost here)
+    - planmäßige_Abfahrt: "(If the outbound journey's departure was scheduled on time, otherwise null).
+    - Schwerbeschädigt Hinreise: '(If the traveler is severely disabled for the outbound journey, otherwise null).
     """
 
     print("\nSending requests to Gemini API for multiple documents (images and PDFs) in a single call...")
@@ -135,9 +136,10 @@ if __name__ == "__main__":
         print("\nGemini API Response:")
         cleaned_response = gemini_response_text.strip('```json\n').strip('\n```')
         try:
-            all_extracted_data = json.loads(cleaned_response)
-            for i, data in enumerate(all_extracted_data):
-                print(f"Document {i+1} Data: {json.dumps(data, indent=2)}")
+            cleaned_response = json.loads(cleaned_response)
+            print(json.dumps(cleaned_response[0], indent=2, ensure_ascii=False))
+            print("\nFilling PDF form with extracted data...")
+            fillpdfs.write_fillable_pdf("Reisekostenabrechnung_28_05_2024.pdf", "filled_form.pdf", cleaned_response[0])
         except json.JSONDecodeError as e:
             print(f"Error decoding JSON response: {e}")
             print("Raw Gemini Response:")
