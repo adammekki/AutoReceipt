@@ -4,17 +4,17 @@ from dotenv import load_dotenv
 from PIL import Image
 import io
 import json
-from pdf2image import convert_from_path # This will be used for PDF to image conversion
+from pdf2image import convert_from_path
 from fillpdf import fillpdfs
 
-# --- Configuration and Setup (remains the same) ---
+# Configuration and Setup (remains the same)
 load_dotenv()
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 if not GEMINI_API_KEY:
     raise ValueError("GEMINI_API_KEY not found in environment variables. Please set it in your .env file.")
 genai.configure(api_key=GEMINI_API_KEY)
 
-# --- Universal Document Preparation Function (handles PDF and image files) ---
+# Universal Document Preparation Function (handles PDF and image files)
 def prepare_document_for_gemini(document_path):
     """
     Takes a path to an image (JPEG, PNG, etc.) or a PDF.
@@ -52,7 +52,7 @@ def prepare_document_for_gemini(document_path):
         try:
             img = Image.open(document_path)
             img_byte_arr = io.BytesIO()
-            image_format = img.format if img.format else 'JPEG' # Use original format or default to JPEG
+            image_format = img.format if img.format else 'JPEG'
             img.save(img_byte_arr, format=image_format)
             gemini_image_parts.append({
                 'mime_type': f'image/{image_format.lower()}',
@@ -65,7 +65,7 @@ def prepare_document_for_gemini(document_path):
 
     return gemini_image_parts
 
-# --- Gemini API Call Function ---
+# Gemini API Call Function
 def get_gemini_vision_response_multi_doc(document_paths_list, prompt):
     model = genai.GenerativeModel('gemini-2.5-flash')
 
@@ -91,11 +91,8 @@ def get_gemini_vision_response_multi_doc(document_paths_list, prompt):
         print(f"Error calling Gemini API with documents: {e}")
         return None
 
-# --- Main Execution Block (using your test PDFs) ---
+# Main Execution Block (using your test PDFs)
 if __name__ == "__main__":
-    # --- IMPORTANT: Specify YOUR test PDF/image paths here ---
-    # Make sure these paths are correct and the files exist in your project directory,
-    # or provide absolute paths to them.
     all_document_paths = [
         "Receipt_Flight1.pdf",
         "Receipt_Flight2.pdf",
@@ -105,7 +102,11 @@ if __name__ == "__main__":
 
     # Your Gemini prompt (as refined in previous steps)
     multi_doc_prompt = """
-    You are an expert at extracting travel expense details from receipts. You will be provided with one or more document images (converted from original images or PDF pages). For each document, extract the following information and return it as a JSON object within a list. The JSON keys MUST exactly match the specified field names below. If a field cannot be found or is not applicable for a specific receipt, return its value as null for that receipt. For amounts, extract the numerical value followed by the currency symbol. If there are several documents, infer the data that is likely to be connected and merge them together into one output. Instead of using None, use empty string
+    You are an expert at extracting travel expense details from receipts. You will be provided with one or more document images (converted from original images or PDF pages). For each document, extract the following information and return it as a JSON object within a list. The JSON keys MUST exactly match the specified field names below. If a field cannot be found or is not applicable for a specific receipt, return its value as null for that receipt. For amounts, extract the numerical value followed by the currency symbol. If there are several documents, infer the data that is likely to be connected and merge them together into one output. Instead of using None, use empty string.
+
+    If a receipt represents both the outbound and return journeys (e.g., a roundtrip flight ticket covering both Hin- und Rückflug), **split the cost evenly** between Hinreise and Rückreise, dividing the total by two.
+
+    If the receipt only covers the return trip (Rückreise to Germany), ignore it.
 
     Output format: A JSON list where each element is a JSON object representing one receipt's extracted data.
 
