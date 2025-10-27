@@ -12,6 +12,7 @@ abrechnung_json = {
     "Telefon_dienstlich": pdf_dict.get("Telefon dienstlich"),
     "\u00fe\u00ff\u0000P\u0000r\u0000i\u0000v\u0000a\u0000t\u0000e\u0000_\u0000A\u0000n\u0000s\u0000c\u0000h\u0000r\u0000i\u0000f\u0000t\u0000_\u0000S\u0000t\u0000r\u0000a\u0000\u00df\u0000e\u0000_\u0000P\u0000L\u0000Z\u0000_\u0000W\u0000o\u0000h\u0000n\u0000o\u0000r\u0000t": pdf_dict.get("Wohnort"),
     "\u00fe\u00ff\u0000B\u0000e\u0000s\u0000c\u0000h\u0000\u00e4\u0000f\u0000t\u0000i\u0000g\u0000u\u0000n\u0000g\u0000s\u0000s\u0000t\u0000e\u0000l\u0000l\u0000e\u0000I\u0000n\u0000s\u0000t\u0000i\u0000t\u0000u\u0000t\u0000_\u0000e\u0000i\u0000n\u0000s\u0000c\u0000h\u0000l\u0000_\u0000A\u0000n\u0000s\u0000c\u0000h\u0000r\u0000i\u0000f\u0000t": pdf_dict.get("Institut"),
+    "Tagegeld": "nein" # For some reason this value does not get added correctly, even if I take the scan from the example and paste into the blank form
 }
 
 try:
