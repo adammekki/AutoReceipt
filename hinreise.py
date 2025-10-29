@@ -145,6 +145,11 @@ class hinreise:
             try:
                 cleaned_response = json.loads(cleaned_response)
                 print(json.dumps(cleaned_response[0], indent=2, ensure_ascii=False))
+                # for key, value in cleaned_response[0].items():
+                #      x = input(f"Is the value for {key} -> {value}? (y/n)")
+                #      if x.lower() == "n":
+                #          new_value = input(f"Please provide the correct value for {key}: ")
+                #          cleaned_response[0][key] = new_value
                 print("\nFilling PDF form with extracted data...")
                 fillpdfs.write_fillable_pdf("filled_form.pdf", "filled_form.pdf", cleaned_response[0])
             except json.JSONDecodeError as e:

@@ -161,6 +161,18 @@ class ruckreise:
             try:
                 cleaned_response = json.loads(cleaned_response)
                 print(json.dumps(cleaned_response[0], indent=2, ensure_ascii=False))
+                for key, value in cleaned_response[0].items():
+                    if key.startswith("þÿ"):
+                        try:
+                            decoded_key = key[2:].replace("\u0000", "")
+                        except UnicodeDecodeError:
+                            decoded_key = key
+                    else:
+                        decoded_key = key
+                    x = input(f"Is the value for {decoded_key} -> {value}? (y/n) :")
+                    if x.lower() == "n":
+                        new_value = input(f"Please provide the correct value for {decoded_key}: ")
+                        cleaned_response[0][key] = new_value
                 print("\nFilling PDF form with extracted data...")
                 fillpdfs.write_fillable_pdf("filled_form.pdf", "filled_form.pdf", cleaned_response[0])
             except json.JSONDecodeError as e:
