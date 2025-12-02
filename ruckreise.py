@@ -39,7 +39,7 @@ class ruckreise:
         if file_extension == '.pdf':
             print(f"Processing PDF: {document_path}")
             try:
-                images_from_pdf = convert_from_path(document_path, poppler_path=os.getenv("POPPLER_PATH"))
+                images_from_pdf = convert_from_path(document_path)
                 for i, img in enumerate(images_from_pdf):
                     img_byte_arr = io.BytesIO()
                     img.save(img_byte_arr, format='JPEG')
