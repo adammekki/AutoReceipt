@@ -1,0 +1,58 @@
+'use client';
+
+import { useApp } from '@/context/AppContext';
+import { AnimatePresence, motion } from 'framer-motion';
+import LandingScreen from './screens/LandingScreen';
+import FlightUploadScreen from './screens/FlightUploadScreen';
+import HotelUploadScreen from './screens/HotelUploadScreen';
+import ProcessingScreen from './screens/ProcessingScreen';
+import CompletionScreen from './screens/CompletionScreen';
+import Navigation from '@/components/Navigation';
+
+const pageVariants = {
+  initial: { opacity: 0, scale: 0.98 },
+  enter: { opacity: 1, scale: 1, transition: { duration: 0.35, ease: 'easeOut' } },
+  exit: { opacity: 0, scale: 0.98, transition: { duration: 0.35, ease: 'easeOut' } },
+};
+
+export default function Home() {
+  const { currentStep } = useApp();
+
+  const renderScreen = () => {
+    switch (currentStep) {
+      case 'landing':
+        return <LandingScreen key="landing" />;
+      case 'flight-upload':
+        return <FlightUploadScreen key="flight-upload" />;
+      case 'flight-processing':
+        return <ProcessingScreen key="flight-processing" type="flight" />;
+      case 'hotel-upload':
+        return <HotelUploadScreen key="hotel-upload" />;
+      case 'hotel-processing':
+        return <ProcessingScreen key="hotel-processing" type="hotel" />;
+      case 'complete':
+        return <CompletionScreen key="complete" />;
+      default:
+        return <LandingScreen key="landing" />;
+    }
+  };
+
+  return (
+    <>
+      <Navigation />
+      <main className="min-h-screen pt-20">
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={currentStep}
+            variants={pageVariants}
+            initial="initial"
+            animate="enter"
+            exit="exit"
+          >
+            {renderScreen()}
+          </motion.div>
+        </AnimatePresence>
+      </main>
+    </>
+  );
+}
