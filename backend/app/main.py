@@ -193,6 +193,9 @@ async def process_trip(
                 if os.path.exists(uploads_dir):
                     shutil.rmtree(uploads_dir)
                     print("Cleaned up uploads directory.")
+
+                if os.path.exists(os.path.join(templates_dir, "filled_form.pdf")):
+                    os.remove(os.path.join(templates_dir, "filled_form.pdf"))
                 
                 return ProcessTripResponse(
                     status="ok",
@@ -205,6 +208,9 @@ async def process_trip(
                 if os.path.exists(uploads_dir):
                     shutil.rmtree(uploads_dir)
                     print("Cleaned up uploads directory.")
+
+                if os.path.exists(os.path.join(templates_dir, "filled_form.pdf")):
+                    os.remove(os.path.join(templates_dir, "filled_form.pdf"))
 
                 errors.append("Filled form was not generated")
                 return ProcessTripResponse(
