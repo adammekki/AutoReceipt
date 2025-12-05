@@ -108,12 +108,21 @@ class hinreise:
 
     def main(self):
         """Main execution block for hinreise processing."""
-        all_document_paths = [
-            os.path.join(self.data_dir, "Receipt_Flight1.pdf"),
-            os.path.join(self.data_dir, "Receipt_Flight2.pdf"),
-            os.path.join(self.data_dir, "Receipt_Flight3.pdf"),
-            os.path.join(self.data_dir, "Receipt_Parking.pdf")
-        ]
+        # Gather all supported files from the data directory dynamically
+        allowed_exts = {'.pdf', '.jpg', '.jpeg', '.png', '.gif', '.bmp', '.tiff'}
+        all_document_paths = []
+        if not os.path.isdir(self.data_dir):
+            print(f"Data directory not found: {self.data_dir}")
+        else:
+            for entry in sorted(os.listdir(self.data_dir)):
+                path = os.path.join(self.data_dir, entry)
+                if os.path.isfile(path):
+                    ext = os.path.splitext(entry)[1].lower()
+                    if ext in allowed_exts:
+                        all_document_paths.append(path)
+
+        if not all_document_paths:
+            print(f"No supported documents found in {self.data_dir}")
 
         multi_doc_prompt = """
         You are an expert at extracting travel expense details from receipts. You will be provided with one or more document images (converted from original images or PDF pages). For each document, extract the following information and return it as a JSON object within a list. The JSON keys MUST exactly match the specified field names below. If a field cannot be found or is not applicable for a specific receipt, return its value as null for that receipt. For amounts, extract the numerical value followed by the currency symbol. If there are several documents, infer the data that is likely to be connected and merge them together into one output. Instead of using None, use empty string.
@@ -154,7 +163,8 @@ class hinreise:
                 cleaned_response = json.loads(cleaned_response)
                 print(json.dumps(cleaned_response[0], indent=2, ensure_ascii=False))
                 print("\nFilling PDF form with extracted data...")
-                filled_form_path = os.path.join(self.data_dir, "filled_form.pdf")
+                templates_dir = os.path.join(os.path.dirname(__file__), "templates")
+                filled_form_path = os.path.join(templates_dir, "filled_form.pdf")
                 fillpdfs.write_fillable_pdf(filled_form_path, filled_form_path, cleaned_response[0])
             except json.JSONDecodeError as e:
                 print(f"Error decoding JSON response: {e}")

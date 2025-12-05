@@ -108,12 +108,21 @@ class ruckreise:
 
     def main(self):
         """Main execution block for ruckreise processing."""
-        all_document_paths = [
-            os.path.join(self.data_dir, "Receipt_Flight1.pdf"),
-            os.path.join(self.data_dir, "Receipt_Flight2.pdf"),
-            os.path.join(self.data_dir, "Receipt_Flight3.pdf"),
-            os.path.join(self.data_dir, "Receipt_Parking.pdf")
-        ]
+        # Gather all supported files from the data directory dynamically
+        allowed_exts = {'.pdf', '.jpg', '.jpeg', '.png', '.gif', '.bmp', '.tiff'}
+        all_document_paths = []
+        if not os.path.isdir(self.data_dir):
+            print(f"Data directory not found: {self.data_dir}")
+        else:
+            for entry in sorted(os.listdir(self.data_dir)):
+                path = os.path.join(self.data_dir, entry)
+                if os.path.isfile(path):
+                    ext = os.path.splitext(entry)[1].lower()
+                    if ext in allowed_exts:
+                        all_document_paths.append(path)
+
+        if not all_document_paths:
+            print(f"No supported documents found in {self.data_dir}")
 
         multi_doc_prompt = """
             You are an expert at extracting travel expense details from receipts. 
@@ -148,7 +157,7 @@ class ruckreise:
                 - "Rückreise_Ort": "(Specific location of arrival, e.g., 'Wohnung', 'Dienststelle')"
                 - "Verkehrsmittel Rückreise": "(Primary mode of transport, e.g., 'Flugzeug', 'Bahn', 'Eigenes_KfZ', 'Fahrgemeinschaft', 'Bus_Bahn_Strassenbahn', 'Schiff', 'Sonstiges')"
                 - "Klasse Rückreise": "(Class of travel, choices are 'Klasse 1', 'Klasse 2'. Leave empty if not specified)"
-                - "þÿ\\u0000F\\u0000u\\u0000l\\u0000u\\u0000g\\u0000z\\u0000e\\u0000u\\u0000g\\u0000_\\u0000R\\u0000ü\\u0000c\\u0000k\\u0000r\\u0000e\\u0000i\\u0000s\\u0000e": "(Cost for air travel on the return journey. If both Hin- and Rückflug on one receipt, divide by 2. Format: '717,31€')"
+                - "þÿ\\u0000F\\u0000u\\u0000l\\u0000u\\u0000g\\u0000z\\u0000e\\u0000u\\u0000g\\u0000_\\u0000R\\u0000ü\\u0000c\\u0000k\\u0000r\\u0000e\\u0000i\\u0000s\\u0000e": "(Cost for air travel on the return journey. If both Hin- and Rückflug on one receipt, divide by 2. Format: '717,31€'). This cannot be left empty."
                 - "þÿ\\u0000B\\u0000a\\u0000h\\u0000n\\u0000_\\u00001\\u0000u\\u00002\\u0000_\\u0000K\\u0000l\\u0000a\\u0000s\\u0000s\\u0000e\\u0000_\\u0000R\\u0000ü\\u0000c\\u0000k\\u0000r\\u0000e\\u0000i\\u0000s\\u0000e": "(Cost for train travel on the return journey, e.g., '44,00€' or '1. Klasse')"
                 - "þÿ\\u0000E\\u0000i\\u0000g\\u0000e\\u0000n\\u0000e\\u0000s\\u0000_\\u0000K\\u0000f\\u0000Z\\u0000_\\u0000R\\u0000ü\\u0000c\\u0000k\\u0000r\\u0000e\\u0000i\\u0000s\\u0000e": "(Details for personal car usage, e.g., '174km')"
                 - "þÿ\\u0000D\\u0000i\\u0000e\\u0000n\\u0000s\\u0000t\\u0000w\\u0000a\\u0000g\\u0000e\\u0000n\\u0000_\\u0000R\\u0000ü\\u0000c\\u0000k\\u0000r\\u0000e\\u0000i\\u0000s\\u0000e": "(Details for company car usage)"
@@ -169,7 +178,8 @@ class ruckreise:
                 cleaned_response = json.loads(cleaned_response)
                 print(json.dumps(cleaned_response[0], indent=2, ensure_ascii=False))
                 print("\nFilling PDF form with extracted data...")
-                filled_form_path = os.path.join(self.data_dir, "filled_form.pdf")
+                templates_dir = os.path.join(os.path.dirname(__file__), "templates")
+                filled_form_path = os.path.join(templates_dir, "filled_form.pdf")
                 fillpdfs.write_fillable_pdf(filled_form_path, filled_form_path, cleaned_response[0])
             except json.JSONDecodeError as e:
                 print(f"Error decoding JSON response: {e}")

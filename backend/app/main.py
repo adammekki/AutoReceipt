@@ -9,7 +9,7 @@ import os
 import shutil
 import tempfile
 from typing import List, Optional
-from fastapi import FastAPI, UploadFile, File, HTTPException, Form
+from fastapi import FastAPI, UploadFile, File, HTTPException, Form, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
@@ -24,6 +24,7 @@ from app.hinreise import hinreise
 from app.ruckreise import ruckreise
 from app.hotel import hotel
 
+HERE = os.path.dirname(__file__)
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -80,21 +81,16 @@ async def health_check():
 
 @app.post("/api/process-trip", response_model=ProcessTripResponse)
 async def process_trip(
-    # Flight receipts
-    receipt_flight1: Optional[UploadFile] = File(None, description="Receipt for flight 1"),
-    receipt_flight2: Optional[UploadFile] = File(None, description="Receipt for flight 2"),
-    receipt_flight3: Optional[UploadFile] = File(None, description="Receipt for flight 3"),
-    receipt_parking: Optional[UploadFile] = File(None, description="Parking receipt"),
-    # Hotel/Conference receipts
-    payment_conference: Optional[UploadFile] = File(None, description="Conference payment receipt"),
-    payment_parking: Optional[UploadFile] = File(None, description="Parking payment receipt"),
-    receipt_conference: Optional[UploadFile] = File(None, description="Conference receipt"),
-    receipt_hotel: Optional[UploadFile] = File(None, description="Hotel receipt"),
-    # Required form templates
-    dienstreiseantrag: UploadFile = File(..., description="Dienstreiseantrag PDF form (required)"),
-    reisekostenabrechnung: UploadFile = File(..., description="Reisekostenabrechnung PDF template (required)"),
-    # Optional parameters
-    supervisor_name: Optional[str] = Form(None, description="Override supervisor name"),
+
+    # Antrag Upload
+    antrag_form: UploadFile = File(..., description="Dienstreiseantrag PDF form"),
+
+    # Flight receipts (any number)
+    flight_receipts: List[UploadFile] = File([], description="Any number of flight receipts"),
+
+    # Hotel / Conference receipts
+    hotel_receipts: List[UploadFile] = File([], description="Any number of hotel or conference receipts"),
+
 ):
     """
     Process a complete trip expense report.
@@ -118,19 +114,25 @@ async def process_trip(
     # Create a temporary directory for processing
     with tempfile.TemporaryDirectory() as temp_dir:
         try:
+            # Save the Antrag form the uploads dir
+            uploads_dir = os.path.join(HERE, "uploads")
+            templates_dir = os.path.join(HERE, "templates")
+            os.makedirs(uploads_dir, exist_ok=True)
+
+            antrag_path = os.path.join(uploads_dir, "Dienstreiseantrag.pdf")
+            contents = await antrag_form.read()
+            with open(antrag_path, "wb") as f:
+                f.write(contents)
+            print(f"Saved Dienstreiseantrag to {antrag_path}")
+
             # Define file mappings for uploads
-            file_mappings = {
-                "Receipt_Flight1.pdf": receipt_flight1,
-                "Receipt_Flight2.pdf": receipt_flight2,
-                "Receipt_Flight3.pdf": receipt_flight3,
-                "Receipt_Parking.pdf": receipt_parking,
-                "Payment_Conference.pdf": payment_conference,
-                "Payment_Parking.pdf": payment_parking,
-                "Receipt_Conference.pdf": receipt_conference,
-                "Receipt_Hotel(6persons).pdf": receipt_hotel,
-                "Dienstreiseantrag_11_12_2023_V2.pdf": dienstreiseantrag,
-                "Reisekostenabrechnung_28_05_2024.pdf": reisekostenabrechnung,
-            }
+            file_mappings = {}
+
+            for i, file in enumerate(flight_receipts, start=1):
+                file_mappings[f"Receipt_Flight{i}.pdf"] = file
+
+            for i, file in enumerate(hotel_receipts, start=1):
+                file_mappings[f"Receipt_Hotel{i}.pdf"] = file
             
             # Save uploaded files to temp directory
             for filename, upload_file in file_mappings.items():
@@ -149,7 +151,7 @@ async def process_trip(
                 # Step 1: Antrag processing
                 print("Starting Antrag process...")
                 antrag_instance = antrag(data_dir=temp_dir)
-                antrag_instance.main(supervisor_name=supervisor_name)
+                antrag_instance.main()
                 
                 # Step 2: Hinreise processing
                 print("Starting Hinreise process...")
@@ -175,17 +177,22 @@ async def process_trip(
                 )
             
             # Check if filled form was created
-            filled_form_path = os.path.join(temp_dir, "filled_form.pdf")
+            filled_form_path = os.path.join(templates_dir, "filled_form.pdf")
             if os.path.exists(filled_form_path):
                 # Copy to a permanent location for download
                 # In production, you'd want to store this more permanently
-                output_dir = os.path.join(os.path.dirname(__file__), "..", "output")
+                output_dir = os.path.join(HERE, "output")
                 os.makedirs(output_dir, exist_ok=True)
                 
-                import uuid
-                output_filename = f"filled_form_{uuid.uuid4().hex[:8]}.pdf"
-                output_path = os.path.join(output_dir, output_filename)
-                shutil.copy2(filled_form_path, output_path)
+                output_filename = "output_form.pdf"
+                shutil.copy2(
+                    os.path.join(templates_dir, "filled_form.pdf"),
+                    os.path.join(output_dir, output_filename)
+                )
+                # Clean up uploads directory
+                if os.path.exists(uploads_dir):
+                    shutil.rmtree(uploads_dir)
+                    print("Cleaned up uploads directory.")
                 
                 return ProcessTripResponse(
                     status="ok",
@@ -194,6 +201,11 @@ async def process_trip(
                     errors=errors if errors else None
                 )
             else:
+                # Clean up uploads directory
+                if os.path.exists(uploads_dir):
+                    shutil.rmtree(uploads_dir)
+                    print("Cleaned up uploads directory.")
+
                 errors.append("Filled form was not generated")
                 return ProcessTripResponse(
                     status="error",
@@ -210,23 +222,34 @@ async def process_trip(
             )
 
 
-@app.get("/api/download/{filename}")
-async def download_file(filename: str):
+@app.get("/api/download")
+async def download_filled_form(background_tasks: BackgroundTasks):
     """
     Download a generated PDF file.
     
     Args:
         filename: Name of the file to download
     """
-    output_dir = os.path.join(os.path.dirname(__file__), "..", "output")
-    file_path = os.path.join(output_dir, filename)
+    output_dir = os.path.join(os.path.dirname(__file__), "output")
+    file_path = os.path.join(output_dir, "output_form.pdf")
     
     if not os.path.exists(file_path):
         raise HTTPException(status_code=404, detail="File not found")
     
+    # Schedule cleanup after response is sent
+    def cleanup_output():
+        try:
+            if os.path.exists(output_dir):
+                shutil.rmtree(output_dir)
+                print("Cleaned up output directory")
+        except Exception as e:
+            print(f"Error cleaning up output directory: {e}")
+    
+    background_tasks.add_task(cleanup_output)
+    
     return FileResponse(
         path=file_path,
-        filename=filename,
+        filename="output_form.pdf",
         media_type="application/pdf"
     )
 

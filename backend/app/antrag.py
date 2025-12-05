@@ -20,9 +20,12 @@ class antrag:
         Args:
             supervisor_name: Optional supervisor name override. If None, uses value from form.
         """
-        filled_form_path = os.path.join(self.data_dir, "filled_form.pdf")
-        dienstreise_path = os.path.join(self.data_dir, "Dienstreiseantrag_11_12_2023_V2.pdf")
-        reisekosten_path = os.path.join(self.data_dir, "Reisekostenabrechnung_28_05_2024.pdf")
+        uploads_dir = os.path.join(os.path.dirname(__file__), "uploads")
+        dienstreise_path = os.path.join(uploads_dir, "Dienstreiseantrag.pdf")
+        templates_dir = os.path.join(os.path.dirname(__file__), "templates")
+        reisekosten_path = os.path.join(templates_dir, "Reisekostenabrechnung_28_05_2024.pdf")
+        filled_form_path = os.path.join(templates_dir, "filled_form.pdf")
+
         
         # Remove existing filled form if it exists
         if os.path.exists(filled_form_path):
