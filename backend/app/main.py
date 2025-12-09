@@ -259,40 +259,6 @@ async def download_filled_form(background_tasks: BackgroundTasks):
         media_type="application/pdf"
     )
 
-
-# Individual endpoints for each processing step (optional, for fine-grained control)
-
-@app.post("/api/antrag")
-async def process_antrag(
-    dienstreiseantrag: UploadFile = File(...),
-    reisekostenabrechnung: UploadFile = File(...),
-    supervisor_name: Optional[str] = Form(None),
-):
-    """Process only the Antrag step."""
-    with tempfile.TemporaryDirectory() as temp_dir:
-        try:
-            # Save required files
-            dienstreise_path = os.path.join(temp_dir, "Dienstreiseantrag_11_12_2023_V2.pdf")
-            reisekosten_path = os.path.join(temp_dir, "Reisekostenabrechnung_28_05_2024.pdf")
-            
-            contents = await dienstreiseantrag.read()
-            with open(dienstreise_path, "wb") as f:
-                f.write(contents)
-            
-            contents = await reisekostenabrechnung.read()
-            with open(reisekosten_path, "wb") as f:
-                f.write(contents)
-            
-            # Process
-            antrag_instance = antrag(data_dir=temp_dir)
-            antrag_instance.main(supervisor_name=supervisor_name)
-            
-            return {"status": "ok", "message": "Antrag processed successfully"}
-            
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=str(e))
-
-
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000, reload=True)
