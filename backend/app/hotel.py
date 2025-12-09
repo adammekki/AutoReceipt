@@ -1,24 +1,33 @@
 import os
+import io
+import json
 import google.generativeai as genai
 from dotenv import load_dotenv
 from PIL import Image
-import io
-import json
 from pdf2image import convert_from_path
 from fillpdf import fillpdfs
 
+
 class hotel:
+    def __init__(self, data_dir: str = "."):
+        """
+        Initialize hotel with a data directory.
+        
+        Args:
+            data_dir: Directory where PDF files are located
+        """
+        self.data_dir = data_dir
+        self._setup_gemini()
+    
+    def _setup_gemini(self):
+        """Setup Gemini API configuration."""
+        load_dotenv()
+        self.GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+        if not self.GEMINI_API_KEY:
+            raise ValueError("GEMINI_API_KEY not found in environment variables. Please set it in your .env file.")
+        genai.configure(api_key=self.GEMINI_API_KEY)
 
-    # Configuration and Setup (remains the same)
-    load_dotenv()
-    GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-    if not GEMINI_API_KEY:
-        raise ValueError("GEMINI_API_KEY not found in environment variables. Please set it in your .env file.")
-    genai.configure(api_key=GEMINI_API_KEY)
-
-    # Universal Document Preparation Function (handles PDF and image files)
-    @staticmethod
-    def prepare_document_for_gemini(document_path):
+    def prepare_document_for_gemini(self, document_path):
         """
         Takes a path to an image (JPEG, PNG, etc.) or a PDF.
         If PDF, converts each page to a PIL Image.
@@ -35,12 +44,14 @@ class hotel:
         if file_extension == '.pdf':
             print(f"Processing PDF: {document_path}")
             try:
-                # convert_from_path returns a list of PIL Image objects, one for each page
-                # You can adjust dpi for higher quality if needed, e.g., dpi=300
-                images_from_pdf = convert_from_path(document_path, poppler_path=os.getenv("POPPLER_PATH"))
+                poppler_path = os.getenv("POPPLER_PATH")
+                if poppler_path:
+                    images_from_pdf = convert_from_path(document_path, poppler_path=poppler_path)
+                else:
+                    images_from_pdf = convert_from_path(document_path)
                 for i, img in enumerate(images_from_pdf):
                     img_byte_arr = io.BytesIO()
-                    img.save(img_byte_arr, format='JPEG') # Convert to JPEG bytes for Gemini
+                    img.save(img_byte_arr, format='JPEG')
                     gemini_image_parts.append({
                         'mime_type': 'image/jpeg',
                         'data': img_byte_arr.getvalue()
@@ -68,25 +79,23 @@ class hotel:
 
         return gemini_image_parts
 
-    # Gemini API Call Function
-    @staticmethod
-    def get_gemini_vision_response_multi_doc(document_paths_list, prompt):
+    def get_gemini_vision_response_multi_doc(self, document_paths_list, prompt):
+        """Send multiple documents to Gemini API with a prompt."""
         model = genai.GenerativeModel('gemini-2.5-flash')
 
         contents = [prompt]
         all_image_parts = []
 
         for doc_path in document_paths_list:
-            prepared_parts = hotel.prepare_document_for_gemini(doc_path)
+            prepared_parts = self.prepare_document_for_gemini(doc_path)
             all_image_parts.extend(prepared_parts)
 
         if not all_image_parts:
             print("No valid images could be prepared from the provided documents. Sending only prompt.")
-            # If no images, still send prompt, but expect less relevant output if image-dependent
-            if len(contents) == 1: # Only the prompt text
-                return None # Or handle differently, e.g., send with a placeholder image if API allows
+            if len(contents) == 1:
+                return None
             
-        contents.extend(all_image_parts) # Add all prepared image parts to the contents list
+        contents.extend(all_image_parts)
 
         try:
             response = model.generate_content(contents)
@@ -95,17 +104,24 @@ class hotel:
             print(f"Error calling Gemini API with documents: {e}")
             return None
 
-    # Main Execution Block (using your test PDFs)
     def main(self):
-        all_document_paths = [
-            "Payment_Conference.pdf",
-            "Payment_Parking.pdf",
-            "Receipt_Conference.pdf",
-            "Receipt_Hotel(6persons).pdf",
+        """Main execution block for hotel processing."""
+        # Gather all supported files from the data directory dynamically
+        allowed_exts = {'.pdf', '.jpg', '.jpeg', '.png', '.gif', '.bmp', '.tiff'}
+        all_document_paths = []
+        if not os.path.isdir(self.data_dir):
+            print(f"Data directory not found: {self.data_dir}")
+        else:
+            for entry in sorted(os.listdir(self.data_dir)):
+                path = os.path.join(self.data_dir, entry)
+                if os.path.isfile(path):
+                    ext = os.path.splitext(entry)[1].lower()
+                    if ext in allowed_exts:
+                        all_document_paths.append(path)
 
-        ]
+        if not all_document_paths:
+            print(f"No supported documents found in {self.data_dir}")
 
-        # Your Gemini prompt (as refined in previous steps)
         multi_doc_prompt = """
         You are an expert at extracting travel expense details from receipts. You will be provided with one or more document images (converted from original images or PDF pages). For each document, extract the following information and return it as a JSON object within a list. The JSON keys MUST exactly match the specified field names below. If a field cannot be found or is not applicable for a specific receipt, return its value as null for that receipt. For amounts, extract the numerical value followed by the currency symbol. If there are several documents, infer the data that is likely to be connected and merge them together into one output. Instead of using None, use empty string.
         Date format: DD.MM.YYYY
@@ -121,8 +137,8 @@ class hotel:
         - "þÿ\\u0000D\\u0000i\\u0000e\\u0000n\\u0000s\\u0000t\\u0000g\\u0000e\\u0000s\\u0000c\\u0000h\\u0000ä\\u0000f\\u0000t\\u0000_\\u0000u\\u0000m": This is the start time of the conference.
         - "þÿ\\u0000E\\u0000n\\u0000d\\u0000e\\u0000_\\u0000D\\u0000i\\u0000e\\u0000n\\u0000s\\u0000t\\u0000g\\u0000e\\u0000s\\u0000c\\u0000h\\u0000ä\\u0000f\\u0000t\\u0000_\\u0000a\\u0000m": This is the end date of the conference.
         - "þÿ\\u0000E\\u0000n\\u0000d\\u0000e\\u0000_\\u0000D\\u0000i\\u0000e\\u0000n\\u0000s\\u0000t\\u0000g\\u0000e\\u0000s\\u0000c\\u0000h\\u0000ä\\u0000f\\u0000t\\u0000_\\u0000u\\u0000m": This is the end time of the conference.
-        - "þÿ\\u0000G\\u0000e\\u0000s\\u0000c\\u0000h\\u0000ä\\u0000f\\u0000t\\u0000s\\u0000k\\u0000o\\u0000r\\u0000t\\u0000_\\u0000K\\u0000o\\u0000s\\u0000t\\u0000e\\u0000n\\u0000_\\u0000U\\u0000n\\u0000t\\u0000e\\u0000r\\u0000k\\u0000u\\u0000n\\u0000f\\u0000t": This is the costs for accommodation including breakfast.
-        - "þÿ\\u0000G\\u0000e\\u0000s\\u0000c\\u0000h\\u0000ä\\u0000f\\u0000t\\u0000s\\u0000k\\u0000o\\u0000r\\u0000t\\u0000_\\u0000s\\u0000o\\u0000n\\u0000s\\u0000t\\u0000i\\u0000g\\u0000e\\u0000_\\u0000K\\u0000o\\u0000s\\u0000t\\u0000e\\u0000n": This is other costs (e.g. conference fee, parking fees...).
+        - "þÿ\\u0000G\\u0000e\\u0000s\\u0000c\\u0000h\\u0000ä\\u0000f\\u0000t\\u0000s\\u0000k\\u0000o\\u0000r\\u0000t\\u0000_\\u0000K\\u0000o\\u0000s\\u0000t\\u0000e\\u0000n\\u0000_\\u0000U\\u0000n\\u0000t\\u0000e\\u0000r\\u0000k\\u0000u\\u0000n\\u0000f\\u0000t": This is the costs for accommodation including breakfast. If the room capacity is more than one person, divide the total cost by the number of persons to get the correct amount.
+        - "þÿ\\u0000G\\u0000e\\u0000s\\u0000c\\u0000h\\u0000ä\\u0000f\\u0000t\\u0000s\\u0000k\\u0000o\\u0000r\\u0000t\\u0000_\\u0000s\\u0000o\\u0000n\\u0000s\\u0000t\\u0000i\\u0000g\\u0000e\\u0000_\\u0000K\\u0000o\\u0000s\\u0000t\\u0000e\\u0000n": This is other costs (e.g. conference fee, parking fees...). This should be in euros, but if other currency is used, specify it. Make sure to specify the currency symbol of the amount. 
         - "Bus Geschäftsort": This is a checkbox field, if bus or tram (Straßenbahn)is used for business travel, put "ja", else put "nein" (no other options).
         - "þÿ\\u0000G\\u0000e\\u0000s\\u0000c\\u0000h\\u0000ä\\u0000f\\u0000t\\u0000s\\u0000k\\u0000o\\u0000r\\u0000t\\u0000_\\u0000F\\u0000a\\u0000h\\u0000r\\u0000t\\u0000k\\u0000o\\u0000s\\u0000t\\u0000e\\u0000n\\u0000_\\u0000B\\u0000a\\u0000h\\u0000n\\u0000_\\u0000S\\u0000t\\u0000r\\u0000a\\u0000ß\\u0000e\\u0000n\\u0000b\\u0000a\\u0000h\\u0000n": This is the costs for train or tram (Straßenbahn) tickets.
         - "Sonstige Geschäftsort": This is a checkbox field, if other means of transport (e.g. taxi) is used for business travel, put "ja", else put "nein" (no other options).
@@ -130,7 +146,7 @@ class hotel:
         """
 
         print("\nSending requests to Gemini API for multiple documents (images and PDFs) in a single call...")
-        gemini_response_text = hotel.get_gemini_vision_response_multi_doc(all_document_paths, multi_doc_prompt)
+        gemini_response_text = self.get_gemini_vision_response_multi_doc(all_document_paths, multi_doc_prompt)
 
         if gemini_response_text:
             print("\nGemini API Response:")
@@ -138,13 +154,10 @@ class hotel:
             try:
                 cleaned_response = json.loads(cleaned_response)
                 print(json.dumps(cleaned_response[0], indent=2, ensure_ascii=False))
-                # for key, value in cleaned_response[0].items():
-                #      x = input(f"Is the value for {key} -> {value}? (y/n)")
-                #      if x.lower() == "n":
-                #          new_value = input(f"Please provide the correct value for {key}: ")
-                #          cleaned_response[0][key] = new_value
                 print("\nFilling PDF form with extracted data...")
-                fillpdfs.write_fillable_pdf("filled_form.pdf", "filled_form.pdf", cleaned_response[0])
+                templates_dir = os.path.join(os.path.dirname(__file__), "templates")
+                filled_form_path = os.path.join(templates_dir, "filled_form.pdf")
+                fillpdfs.write_fillable_pdf(filled_form_path, filled_form_path, cleaned_response[0])
             except json.JSONDecodeError as e:
                 print(f"Error decoding JSON response: {e}")
                 print("Raw Gemini Response:")
@@ -152,4 +165,4 @@ class hotel:
         else:
             print("\nFailed to get a response from Gemini API.")
 
-        print("\nProcessing complete.")
+        print("\nHotel Processing complete.")

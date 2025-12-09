@@ -1,28 +1,35 @@
 import os
+import io
+import json
 import google.generativeai as genai
 from dotenv import load_dotenv
 from PIL import Image
-import io
-import json
 from pdf2image import convert_from_path
 from fillpdf import fillpdfs
 
+
 class ruckreise:
-    def __init__(self, response):
+    def __init__(self, response, data_dir: str = "."):
+        """
+        Initialize ruckreise with a response and data directory.
+        
+        Args:
+            response: Response from hinreise processing
+            data_dir: Directory where PDF files are located
+        """
         self.response = response
+        self.data_dir = data_dir
+        self._setup_gemini()
 
-            # Main logic for ruckreise
-
-        # Configuration and Setup (remains the same)
+    def _setup_gemini(self):
+        """Setup Gemini API configuration."""
         load_dotenv()
-        GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-        if not GEMINI_API_KEY:
+        self.GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+        if not self.GEMINI_API_KEY:
             raise ValueError("GEMINI_API_KEY not found in environment variables. Please set it in your .env file.")
-        genai.configure(api_key=GEMINI_API_KEY)
+        genai.configure(api_key=self.GEMINI_API_KEY)
 
-    # Universal Document Preparation Function (handles PDF and image files)
-    @staticmethod
-    def prepare_document_for_gemini(document_path):
+    def prepare_document_for_gemini(self, document_path):
         """
         Takes a path to an image (JPEG, PNG, etc.) or a PDF.
         If PDF, converts each page to a PIL Image.
@@ -39,7 +46,11 @@ class ruckreise:
         if file_extension == '.pdf':
             print(f"Processing PDF: {document_path}")
             try:
-                images_from_pdf = convert_from_path(document_path)
+                poppler_path = os.getenv("POPPLER_PATH")
+                if poppler_path:
+                    images_from_pdf = convert_from_path(document_path, poppler_path=poppler_path)
+                else:
+                    images_from_pdf = convert_from_path(document_path)
                 for i, img in enumerate(images_from_pdf):
                     img_byte_arr = io.BytesIO()
                     img.save(img_byte_arr, format='JPEG')
@@ -70,24 +81,23 @@ class ruckreise:
 
         return gemini_image_parts
 
-    @staticmethod
-    def get_gemini_vision_response_multi_doc(document_paths_list, prompt):
+    def get_gemini_vision_response_multi_doc(self, document_paths_list, prompt):
+        """Send multiple documents to Gemini API with a prompt."""
         model = genai.GenerativeModel('gemini-2.5-flash')
 
         contents = [prompt]
         all_image_parts = []
 
         for doc_path in document_paths_list:
-            prepared_parts = ruckreise.prepare_document_for_gemini(doc_path)
+            prepared_parts = self.prepare_document_for_gemini(doc_path)
             all_image_parts.extend(prepared_parts)
 
         if not all_image_parts:
             print("No valid images could be prepared from the provided documents. Sending only prompt.")
-            # If no images, still send prompt, but expect less relevant output if image-dependent
-            if len(contents) == 1: # Only the prompt text
-                return None # Or handle differently, e.g., send with a placeholder image if API allows
+            if len(contents) == 1:
+                return None
             
-        contents.extend(all_image_parts) # Add all prepared image parts to the contents list
+        contents.extend(all_image_parts)
 
         try:
             response = model.generate_content(contents)
@@ -95,19 +105,25 @@ class ruckreise:
         except Exception as e:
             print(f"Error calling Gemini API with documents: {e}")
             return None
-            return None
 
     def main(self):
+        """Main execution block for ruckreise processing."""
+        # Gather all supported files from the data directory dynamically
+        allowed_exts = {'.pdf', '.jpg', '.jpeg', '.png', '.gif', '.bmp', '.tiff'}
+        all_document_paths = []
+        if not os.path.isdir(self.data_dir):
+            print(f"Data directory not found: {self.data_dir}")
+        else:
+            for entry in sorted(os.listdir(self.data_dir)):
+                path = os.path.join(self.data_dir, entry)
+                if os.path.isfile(path):
+                    ext = os.path.splitext(entry)[1].lower()
+                    if ext in allowed_exts:
+                        all_document_paths.append(path)
 
-    # Main Execution Block (using your test PDFs)
-        all_document_paths = [
-            "Receipt_Flight1.pdf",
-            "Receipt_Flight2.pdf",
-            "Receipt_Flight3.pdf",
-            "Receipt_Parking.pdf"
-        ]
+        if not all_document_paths:
+            print(f"No supported documents found in {self.data_dir}")
 
-        # Your Gemini prompt (as refined in previous steps)
         multi_doc_prompt = """
             You are an expert at extracting travel expense details from receipts. 
             You will be provided with one or more document images (converted from original images or PDF pages), 
@@ -141,7 +157,7 @@ class ruckreise:
                 - "Rückreise_Ort": "(Specific location of arrival, e.g., 'Wohnung', 'Dienststelle')"
                 - "Verkehrsmittel Rückreise": "(Primary mode of transport, e.g., 'Flugzeug', 'Bahn', 'Eigenes_KfZ', 'Fahrgemeinschaft', 'Bus_Bahn_Strassenbahn', 'Schiff', 'Sonstiges')"
                 - "Klasse Rückreise": "(Class of travel, choices are 'Klasse 1', 'Klasse 2'. Leave empty if not specified)"
-                - "þÿ\\u0000F\\u0000u\\u0000l\\u0000u\\u0000g\\u0000z\\u0000e\\u0000u\\u0000g\\u0000_\\u0000R\\u0000ü\\u0000c\\u0000k\\u0000r\\u0000e\\u0000i\\u0000s\\u0000e": "(Cost for air travel on the return journey. If both Hin- and Rückflug on one receipt, divide by 2. Format: '717,31€')"
+                - "þÿ\\u0000F\\u0000l\\u0000u\\u0000g\\u0000z\\u0000e\\u0000u\\u0000g\\u0000_\\u0000R\\u0000ü\\u0000c\\u0000k\\u0000r\\u0000e\\u0000i\\u0000s\\u0000e": "(Cost for air travel on the return journey. If both Hin- and Rückflug on one receipt, divide by 2. Format: '717,31€'). This cannot be left empty."
                 - "þÿ\\u0000B\\u0000a\\u0000h\\u0000n\\u0000_\\u00001\\u0000u\\u00002\\u0000_\\u0000K\\u0000l\\u0000a\\u0000s\\u0000s\\u0000e\\u0000_\\u0000R\\u0000ü\\u0000c\\u0000k\\u0000r\\u0000e\\u0000i\\u0000s\\u0000e": "(Cost for train travel on the return journey, e.g., '44,00€' or '1. Klasse')"
                 - "þÿ\\u0000E\\u0000i\\u0000g\\u0000e\\u0000n\\u0000e\\u0000s\\u0000_\\u0000K\\u0000f\\u0000Z\\u0000_\\u0000R\\u0000ü\\u0000c\\u0000k\\u0000r\\u0000e\\u0000i\\u0000s\\u0000e": "(Details for personal car usage, e.g., '174km')"
                 - "þÿ\\u0000D\\u0000i\\u0000e\\u0000n\\u0000s\\u0000t\\u0000w\\u0000a\\u0000g\\u0000e\\u0000n\\u0000_\\u0000R\\u0000ü\\u0000c\\u0000k\\u0000r\\u0000e\\u0000i\\u0000s\\u0000e": "(Details for company car usage)"
@@ -152,7 +168,7 @@ class ruckreise:
         """
 
         print("\nSending requests to Gemini API for multiple documents (images and PDFs) in a single call...")
-        gemini_response_text = ruckreise.get_gemini_vision_response_multi_doc(all_document_paths, multi_doc_prompt)
+        gemini_response_text = self.get_gemini_vision_response_multi_doc(all_document_paths, multi_doc_prompt)
         print("\nSending requests to Gemini API for multiple documents (images and PDFs) in a single call...")
 
         if gemini_response_text:
@@ -161,20 +177,10 @@ class ruckreise:
             try:
                 cleaned_response = json.loads(cleaned_response)
                 print(json.dumps(cleaned_response[0], indent=2, ensure_ascii=False))
-                for key, value in cleaned_response[0].items():
-                    if key.startswith("þÿ"):
-                        try:
-                            decoded_key = key[2:].replace("\u0000", "")
-                        except UnicodeDecodeError:
-                            decoded_key = key
-                    else:
-                        decoded_key = key
-                    x = input(f"Is the value for {decoded_key} -> {value}? (y/n) :")
-                    if x.lower() == "n":
-                        new_value = input(f"Please provide the correct value for {decoded_key}: ")
-                        cleaned_response[0][key] = new_value
                 print("\nFilling PDF form with extracted data...")
-                fillpdfs.write_fillable_pdf("filled_form.pdf", "filled_form.pdf", cleaned_response[0])
+                templates_dir = os.path.join(os.path.dirname(__file__), "templates")
+                filled_form_path = os.path.join(templates_dir, "filled_form.pdf")
+                fillpdfs.write_fillable_pdf(filled_form_path, filled_form_path, cleaned_response[0])
             except json.JSONDecodeError as e:
                 print(f"Error decoding JSON response: {e}")
                 print("Raw Gemini Response:")
@@ -182,4 +188,4 @@ class ruckreise:
         else:
             print("\nFailed to get a response from Gemini API.")
 
-        print("\nProcessing complete.")
+        print("\nRuckreise Processing complete.")
