@@ -3,6 +3,7 @@
 import { useApp } from '@/context/AppContext';
 import { AnimatePresence, motion } from 'framer-motion';
 import LandingScreen from './screens/LandingScreen';
+import AntragUploadScreen from './screens/AntragUploadScreen';
 import FlightUploadScreen from './screens/FlightUploadScreen';
 import HotelUploadScreen from './screens/HotelUploadScreen';
 import ProcessingScreen from './screens/ProcessingScreen';
@@ -22,14 +23,14 @@ export default function Home() {
     switch (currentStep) {
       case 'landing':
         return <LandingScreen key="landing" />;
+      case 'antrag-upload':
+        return <AntragUploadScreen key="antrag-upload" />;
       case 'flight-upload':
         return <FlightUploadScreen key="flight-upload" />;
-      case 'flight-processing':
-        return <ProcessingScreen key="flight-processing" type="flight" />;
       case 'hotel-upload':
         return <HotelUploadScreen key="hotel-upload" />;
-      case 'hotel-processing':
-        return <ProcessingScreen key="hotel-processing" type="hotel" />;
+      case 'processing':
+        return <ProcessingScreen key="processing" />;
       case 'complete':
         return <CompletionScreen key="complete" />;
       default:
