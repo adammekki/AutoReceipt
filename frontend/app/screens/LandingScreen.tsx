@@ -1,7 +1,7 @@
 'use client';
 
 import { motion } from 'framer-motion';
-import { ArrowRight, Sparkles } from 'lucide-react';
+import { ArrowRight, Sparkles, FileText, Plane, Building } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
 
 export default function LandingScreen() {
@@ -53,7 +53,7 @@ export default function LandingScreen() {
           transition={{ duration: 0.6, delay: 0.3 }}
         >
           <button
-            onClick={() => setCurrentStep('flight-upload')}
+            onClick={() => setCurrentStep('antrag-upload')}
             className="group btn-primary text-lg px-10 py-5"
           >
             Start New Claim
@@ -61,7 +61,7 @@ export default function LandingScreen() {
           </button>
         </motion.div>
 
-        {/* Feature highlights */}
+        {/* 3-Step Flow Preview */}
         <motion.div
           initial={{ opacity: 0, y: 30 }}
           animate={{ opacity: 1, y: 0 }}
@@ -70,19 +70,22 @@ export default function LandingScreen() {
         >
           {[
             {
-              icon: '✈️',
+              icon: <FileText className="w-6 h-6" />,
+              step: '1',
+              title: 'Travel Request',
+              description: 'Upload your Dienstreiseantrag form',
+            },
+            {
+              icon: <Plane className="w-6 h-6" />,
+              step: '2',
               title: 'Flight Receipts',
-              description: 'Upload airline confirmations and boarding passes',
+              description: 'Add flight and parking receipts',
             },
             {
-              icon: '🏨',
-              title: 'Hotel Invoices',
-              description: 'Add accommodation receipts with ease',
-            },
-            {
-              icon: '📋',
-              title: 'Auto-Fill Forms',
-              description: 'Download your completed expense form',
+              icon: <Building className="w-6 h-6" />,
+              step: '3',
+              title: 'Hotel & Conference',
+              description: 'Include accommodation documents',
             },
           ].map((feature, index) => (
             <motion.div
@@ -90,9 +93,15 @@ export default function LandingScreen() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.5, delay: 0.5 + index * 0.1 }}
-              className="text-center"
+              className="relative text-center p-6 rounded-2xl bg-[#F8FAFC] border border-[#E2E8F0]"
             >
-              <div className="text-4xl mb-4">{feature.icon}</div>
+              {/* Step number badge */}
+              <div className="absolute -top-3 left-1/2 -translate-x-1/2 w-6 h-6 bg-[#06B6D4] text-white text-xs font-bold rounded-full flex items-center justify-center">
+                {feature.step}
+              </div>
+              <div className="w-12 h-12 bg-white rounded-xl flex items-center justify-center mx-auto mb-4 shadow-sm text-[#64748B]">
+                {feature.icon}
+              </div>
               <h3 className="text-lg font-semibold text-[#1E293B] mb-2">{feature.title}</h3>
               <p className="text-[#64748B] text-sm">{feature.description}</p>
             </motion.div>
