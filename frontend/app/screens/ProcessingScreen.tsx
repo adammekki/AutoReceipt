@@ -46,7 +46,7 @@ export default function ProcessingScreen() {
     return () => clearInterval(interval);
   }, []);
 
-  // Cycle through fun facts every 5 seconds
+  // Cycle through fun facts every 10 seconds
   useEffect(() => {
     const interval = setInterval(() => {
       setMessageIndex(prev => (prev + 1) % funFacts.length);
