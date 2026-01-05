@@ -1,6 +1,17 @@
 'use client';
 
-import { createContext, useContext, useState, ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { 
+  UserProfile, 
+  EMPTY_PROFILE, 
+  loadProfile, 
+  saveProfile as saveProfileToStorage,
+  validateProfile,
+  ProfileValidationErrors 
+} from '@/lib/userProfile';
+
+// Re-export UserProfile type for convenience
+export type { UserProfile, ProfileValidationErrors };
 
 // Step types for the 3-stage upload flow
 export type AppStep = 
@@ -66,6 +77,14 @@ interface AppContextType {
   setProcessingMessage: (message: string) => void;
   error: string | null;
   setError: (error: string | null) => void;
+
+  // User Profile (client-side persistence)
+  userProfile: UserProfile;
+  setUserProfile: (profile: UserProfile) => void;
+  updateUserProfile: (updates: Partial<UserProfile>) => void;
+  saveUserProfile: () => boolean;
+  isProfileLoaded: boolean;
+  profileValidationErrors: ProfileValidationErrors;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -84,6 +103,49 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [isProcessing, setIsProcessing] = useState(false);
   const [processingMessage, setProcessingMessage] = useState('');
   const [error, setError] = useState<string | null>(null);
+
+  // User Profile state (client-side persistence)
+  const [userProfile, setUserProfileState] = useState<UserProfile>(EMPTY_PROFILE);
+  const [isProfileLoaded, setIsProfileLoaded] = useState(false);
+  const [profileValidationErrors, setProfileValidationErrors] = useState<ProfileValidationErrors>({});
+
+  // Load user profile from localStorage on mount
+  useEffect(() => {
+    const storedProfile = loadProfile();
+    setUserProfileState(storedProfile);
+    setIsProfileLoaded(true);
+  }, []);
+
+  // Update profile with new values
+  const setUserProfile = (profile: UserProfile) => {
+    setUserProfileState(profile);
+    // Validate on change
+    const errors = validateProfile(profile);
+    setProfileValidationErrors(errors);
+  };
+
+  // Partial update helper
+  const updateUserProfile = (updates: Partial<UserProfile>) => {
+    setUserProfileState((prev) => {
+      const updated = { ...prev, ...updates };
+      // Validate on change
+      const errors = validateProfile(updated);
+      setProfileValidationErrors(errors);
+      return updated;
+    });
+  };
+
+  // Save profile to localStorage
+  const saveUserProfile = (): boolean => {
+    const errors = validateProfile(userProfile);
+    setProfileValidationErrors(errors);
+    
+    if (Object.keys(errors).length > 0) {
+      return false;
+    }
+    
+    return saveProfileToStorage(userProfile);
+  };
 
   // Step 1: Antrag file
   const setAntragFile = (file: File | null) => {
@@ -136,6 +198,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
         setProcessingMessage,
         error,
         setError,
+        // User Profile
+        userProfile,
+        setUserProfile,
+        updateUserProfile,
+        saveUserProfile,
+        isProfileLoaded,
+        profileValidationErrors,
       }}
     >
       {children}

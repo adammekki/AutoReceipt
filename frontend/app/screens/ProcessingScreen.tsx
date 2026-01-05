@@ -4,6 +4,7 @@ import { useEffect, useCallback, useState, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { useApp } from '../../context/AppContext';
 import { processTrip } from '../../lib/api';
+import { loadProfile } from '../../lib/userProfile';
 
 const processingMessages = [
   'Analyzing your documents...',
@@ -73,16 +74,15 @@ export default function ProcessingScreen() {
         return;
       }
 
-      // Combine all receipts: flight + hotel/conference
-      const allReceipts = [
-        ...tripData.flightReceipts,
-        ...tripData.hotelConferenceReceipts,
-      ];
+      // Load user profile from localStorage for prefilling
+      // This ensures we always use the latest saved profile data
+      const userProfile = loadProfile();
 
       const response = await processTrip(
         tripData.antragFile,
         tripData.flightReceipts,
-        tripData.hotelConferenceReceipts
+        tripData.hotelConferenceReceipts,
+        userProfile
       );
 
       // Backend returns status: "ok" on success

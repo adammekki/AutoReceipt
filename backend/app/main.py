@@ -3,12 +3,20 @@ AutoReceipt FastAPI Backend
 
 This module provides the FastAPI application that exposes HTTP APIs
 to run the travel expense receipt processing pipeline.
+
+PRIVACY CONSTRAINTS (STRICT):
+- No user data may be stored on the server beyond request scope
+- No receipts or documents may be persisted
+- No bank data may be stored
+- User profile data is only used within the request and then discarded
+- This is a hard requirement due to GDPR and thesis design constraints
 """
 
 import os
+import json
 import shutil
 import tempfile
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from fastapi import FastAPI, UploadFile, File, HTTPException, Form, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
@@ -91,6 +99,10 @@ async def process_trip(
     # Hotel / Conference receipts
     hotel_receipts: List[UploadFile] = File([], description="Any number of hotel or conference receipts"),
 
+    # User profile data for prefilling (optional)
+    # Sent as JSON string to be parsed
+    user_profile: Optional[str] = Form(None, description="User profile JSON for prefilling form fields"),
+
 ):
     """
     Process a complete trip expense report.
@@ -148,9 +160,27 @@ async def process_trip(
             
             # Run the processing pipeline
             try:
-                # Step 1: Antrag processing
+                # Parse user profile if provided
+                # PRIVACY: This data is used only within this request scope
+                # and is never persisted to any storage
+                parsed_user_profile: Optional[Dict[str, Any]] = None
+                if user_profile:
+                    try:
+                        parsed_user_profile = json.loads(user_profile)
+                        print(f"Received user profile for prefill: {list(parsed_user_profile.keys())}")
+                        # Validate that no bank data is included (extra safety check)
+                        forbidden_fields = ['bic', 'iban', 'kreditinstitut', 'bank']
+                        for field in forbidden_fields:
+                            if field in [k.lower() for k in parsed_user_profile.keys()]:
+                                print(f"WARNING: Rejecting forbidden field '{field}' from user profile")
+                                parsed_user_profile.pop(field, None)
+                    except json.JSONDecodeError as e:
+                        print(f"Warning: Could not parse user profile JSON: {e}")
+                        parsed_user_profile = None
+                
+                # Step 1: Antrag processing with user profile prefill
                 print("Starting Antrag process...")
-                antrag_instance = antrag(data_dir=temp_dir)
+                antrag_instance = antrag(data_dir=temp_dir, user_profile=parsed_user_profile)
                 antrag_instance.main()
                 
                 # Step 2: Hinreise processing
