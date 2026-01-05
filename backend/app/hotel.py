@@ -9,16 +9,22 @@ from fillpdf import fillpdfs
 
 
 class hotel:
+    """
+    Simple hotel/conference data extractor.
+    Extracts data from receipts using Gemini and fills PDF forms directly.
+    """
+
     def __init__(self, data_dir: str = "."):
         """
         Initialize hotel with a data directory.
         
         Args:
-            data_dir: Directory where PDF files are located
+            data_dir: Directory where receipt files are located
         """
         self.data_dir = data_dir
+        self.extracted_data = {}
         self._setup_gemini()
-    
+
     def _setup_gemini(self):
         """Setup Gemini API configuration."""
         load_dotenv()
@@ -91,9 +97,8 @@ class hotel:
             all_image_parts.extend(prepared_parts)
 
         if not all_image_parts:
-            print("No valid images could be prepared from the provided documents. Sending only prompt.")
-            if len(contents) == 1:
-                return None
+            print("No valid images could be prepared from the provided documents.")
+            return None
             
         contents.extend(all_image_parts)
 
@@ -104,11 +109,20 @@ class hotel:
             print(f"Error calling Gemini API with documents: {e}")
             return None
 
-    def main(self):
-        """Main execution block for hotel processing."""
-        # Gather all supported files from the data directory dynamically
+    def main(self, fill_pdf: bool = True):
+        """
+        Main execution block for hotel processing.
+        
+        Args:
+            fill_pdf: If True, fills the PDF immediately. If False, only extracts and returns data.
+        
+        Returns:
+            dict: Extracted data (always returned for API compatibility)
+        """
+        # Gather all supported files from the data directory
         allowed_exts = {'.pdf', '.jpg', '.jpeg', '.png', '.gif', '.bmp', '.tiff'}
         all_document_paths = []
+        
         if not os.path.isdir(self.data_dir):
             print(f"Data directory not found: {self.data_dir}")
         else:
@@ -121,7 +135,10 @@ class hotel:
 
         if not all_document_paths:
             print(f"No supported documents found in {self.data_dir}")
+            self.extracted_data = {}
+            return {}
 
+        # Gemini prompt for hotel/conference extraction
         multi_doc_prompt = """
         You are an expert at extracting travel expense details from receipts. You will be provided with one or more document images (converted from original images or PDF pages). For each document, extract the following information and return it as a JSON object within a list. The JSON keys MUST exactly match the specified field names below. If a field cannot be found or is not applicable for a specific receipt, return its value as null for that receipt. For amounts, extract the numerical value followed by the currency symbol. If there are several documents, infer the data that is likely to be connected and merge them together into one output. Instead of using None, use empty string.
         Date format: DD.MM.YYYY
@@ -145,24 +162,52 @@ class hotel:
         - "þÿ\\u0000G\\u0000e\\u0000s\\u0000c\\u0000h\\u0000ä\\u0000f\\u0000t\\u0000s\\u0000k\\u0000o\\u0000r\\u0000t\\u0000_\\u0000F\\u0000a\\u0000h\\u0000r\\u0000t\\u0000k\\u0000o\\u0000s\\u0000t\\u0000e\\u0000n\\u0000_\\u0000s\\u0000o\\u0000n\\u0000s\\u0000t\\u0000i\\u0000g\\u0000e\\u0000s": This is the costs for other means of transport (e.g. taxi).
         """
 
-        print("\nSending requests to Gemini API for multiple documents (images and PDFs) in a single call...")
+        print("\nSending requests to Gemini API for Hotel extraction...")
         gemini_response_text = self.get_gemini_vision_response_multi_doc(all_document_paths, multi_doc_prompt)
 
         if gemini_response_text:
             print("\nGemini API Response:")
             cleaned_response = gemini_response_text.strip('```json\n').strip('\n```')
             try:
-                cleaned_response = json.loads(cleaned_response)
-                print(json.dumps(cleaned_response[0], indent=2, ensure_ascii=False))
-                print("\nFilling PDF form with extracted data...")
-                templates_dir = os.path.join(os.path.dirname(__file__), "templates")
-                filled_form_path = os.path.join(templates_dir, "filled_form.pdf")
-                fillpdfs.write_fillable_pdf(filled_form_path, filled_form_path, cleaned_response[0])
+                parsed_response = json.loads(cleaned_response)
+                self.extracted_data = parsed_response[0] if parsed_response else {}
+                print(json.dumps(self.extracted_data, indent=2, ensure_ascii=False))
+                
+                if fill_pdf:
+                    print("\nFilling PDF form with extracted data...")
+                    templates_dir = os.path.join(os.path.dirname(__file__), "templates")
+                    filled_form_path = os.path.join(templates_dir, "filled_form.pdf")
+                    fillpdfs.write_fillable_pdf(filled_form_path, filled_form_path, self.extracted_data)
+                    print("Hotel data filled in PDF.")
+                    
             except json.JSONDecodeError as e:
                 print(f"Error decoding JSON response: {e}")
                 print("Raw Gemini Response:")
                 print(gemini_response_text)
+                self.extracted_data = {}
         else:
             print("\nFailed to get a response from Gemini API.")
+            self.extracted_data = {}
 
         print("\nHotel Processing complete.")
+        return self.extracted_data
+
+    def fill_pdf_directly(self, data: dict = None):
+        """
+        Fill PDF with provided data or stored extracted_data.
+        Simple direct filling without verification logic.
+        
+        Args:
+            data: Optional data dict. If None, uses self.extracted_data
+        """
+        fill_data = data if data is not None else self.extracted_data
+        
+        if not fill_data:
+            print("No data available to fill PDF.")
+            return
+        
+        print("\nFilling PDF form with hotel data...")
+        templates_dir = os.path.join(os.path.dirname(__file__), "templates")
+        filled_form_path = os.path.join(templates_dir, "filled_form.pdf")
+        fillpdfs.write_fillable_pdf(filled_form_path, filled_form_path, fill_data)
+        print("Hotel data filled in PDF.")

@@ -7,6 +7,7 @@ import AntragUploadScreen from './screens/AntragUploadScreen';
 import FlightUploadScreen from './screens/FlightUploadScreen';
 import HotelUploadScreen from './screens/HotelUploadScreen';
 import ProcessingScreen from './screens/ProcessingScreen';
+import VerificationScreen from './screens/VerificationScreen';
 import CompletionScreen from './screens/CompletionScreen';
 import Navigation from '@/components/Navigation';
 
@@ -31,6 +32,8 @@ export default function Home() {
         return <HotelUploadScreen key="hotel-upload" />;
       case 'processing':
         return <ProcessingScreen key="processing" />;
+      case 'verification':
+        return <VerificationScreen key="verification" />;
       case 'complete':
         return <CompletionScreen key="complete" />;
       default:

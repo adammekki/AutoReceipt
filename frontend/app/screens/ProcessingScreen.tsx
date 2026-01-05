@@ -3,7 +3,7 @@
 import { useEffect, useCallback, useState, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { useApp } from '../../context/AppContext';
-import { processTrip } from '../../lib/api';
+import { extractTripData } from '../../lib/api';
 import { loadProfile } from '../../lib/userProfile';
 
 const processingMessages = [
@@ -34,12 +34,13 @@ const funFacts = [
 ];
 
 export default function ProcessingScreen() {
-  const { setCurrentStep, tripData, setResult, setError } = useApp();
+  const { setCurrentStep, tripData, setResult, setError, setExtractedData } = useApp();
   const [messageIndex, setMessageIndex] = useState(0);
+  const [funFactIndex, setFunFactIndex] = useState(0);
   const [progress, setProgress] = useState(0);
   const hasStartedProcessing = useRef(false);
 
-  // Cycle through messages
+  // Cycle through processing messages every 2 seconds
   useEffect(() => {
     const interval = setInterval(() => {
       setMessageIndex(prev => (prev + 1) % processingMessages.length);
@@ -47,11 +48,11 @@ export default function ProcessingScreen() {
     return () => clearInterval(interval);
   }, []);
 
-  // Cycle through fun facts every 10 seconds
+  // Cycle through fun facts every 5 seconds (fixed timing)
   useEffect(() => {
     const interval = setInterval(() => {
-      setMessageIndex(prev => (prev + 1) % funFacts.length);
-    }, 10000);
+      setFunFactIndex(prev => (prev + 1) % funFacts.length);
+    }, 5000);
     return () => clearInterval(interval);
   }, []);
 
@@ -78,20 +79,21 @@ export default function ProcessingScreen() {
       // This ensures we always use the latest saved profile data
       const userProfile = loadProfile();
 
-      const response = await processTrip(
+      // Phase 1: Extract data from documents for verification
+      const response = await extractTripData(
         tripData.antragFile,
         tripData.flightReceipts,
         tripData.hotelConferenceReceipts,
         userProfile
       );
 
-      // Backend returns status: "ok" on success
+      // Backend returns extracted data for verification
       if (response.status === 'ok') {
-        setResult(response);
+        setExtractedData(response);
         setProgress(100);
-        // Small delay to show completion
+        // Small delay to show completion, then go to verification
         setTimeout(() => {
-          setCurrentStep('complete');
+          setCurrentStep('verification');
         }, 500);
       } else {
         setError(response.message || 'Processing failed');
@@ -102,7 +104,7 @@ export default function ProcessingScreen() {
       setError(err instanceof Error ? err.message : 'An error occurred');
       setCurrentStep('landing');
     }
-  }, [tripData, setResult, setError, setCurrentStep]);
+  }, [tripData, setExtractedData, setError, setCurrentStep]);
 
   useEffect(() => {
     // Only process once - prevent infinite loop from dependency changes
@@ -152,13 +154,13 @@ export default function ProcessingScreen() {
 
         {/* Fun Fact */}
         <motion.div
-          key={messageIndex}
+          key={funFactIndex}
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: -10 }}
           className="bg-[#FEF3C7] text-[#92400E] px-4 py-3 rounded-xl mb-8 text-sm font-medium"
         >
-          {funFacts[messageIndex]}
+          {funFacts[funFactIndex]}
         </motion.div>
 
         {/* Progress Bar */}

@@ -20,6 +20,7 @@ export type AppStep =
   | 'flight-upload'       // Step 2: Upload flight receipts
   | 'hotel-upload'        // Step 3: Upload hotel/conference receipts
   | 'processing'          // Processing all documents
+  | 'verification'        // Verify AI-extracted dates, times, locations
   | 'complete';           // Show results and download
 
 // API response type matching backend ProcessTripResponse
@@ -28,6 +29,17 @@ export interface ProcessTripResponse {
   message: string;
   filled_pdf: string | null;
   errors: string[] | null;
+}
+
+// Extended response for extraction phase (before verification)
+export interface ExtractedDataResponse {
+  status: string;
+  message: string;
+  session_id: string;
+  hinreise: Record<string, string>;
+  ruckreise: Record<string, string>;
+  hotel: Record<string, string>;
+  errors?: string[] | null;
 }
 
 // Trip data containing all uploaded files across steps
@@ -44,6 +56,9 @@ interface TripData {
   
   // Processing results
   result: ProcessTripResponse | null;
+  
+  // Extracted data for verification
+  extractedData: ExtractedDataResponse | null;
 }
 
 interface AppContextType {
@@ -66,6 +81,9 @@ interface AppContextType {
   
   // Results
   setResult: (result: ProcessTripResponse | null) => void;
+  
+  // Extracted data for verification
+  setExtractedData: (data: ExtractedDataResponse | null) => void;
   
   // Reset
   resetApp: () => void;
@@ -95,6 +113,7 @@ const initialTripData: TripData = {
   parkingReceipts: [],
   hotelConferenceReceipts: [],
   result: null,
+  extractedData: null,
 };
 
 export function AppProvider({ children }: { children: ReactNode }) {
@@ -171,6 +190,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setTripData((prev) => ({ ...prev, result }));
   };
 
+  // Extracted data for verification
+  const setExtractedData = (data: ExtractedDataResponse | null) => {
+    setTripData((prev) => ({ ...prev, extractedData: data }));
+  };
+
   // Reset everything
   const resetApp = () => {
     setCurrentStep('landing');
@@ -191,6 +215,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         setParkingReceipts,
         setHotelConferenceReceipts,
         setResult,
+        setExtractedData,
         resetApp,
         isProcessing,
         setIsProcessing,

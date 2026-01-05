@@ -16,6 +16,7 @@ import os
 import json
 import shutil
 import tempfile
+import uuid
 from typing import List, Optional, Dict, Any
 from fastapi import FastAPI, UploadFile, File, HTTPException, Form, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
@@ -33,6 +34,11 @@ from app.ruckreise import ruckreise
 from app.hotel import hotel
 
 HERE = os.path.dirname(__file__)
+
+# In-memory session storage for verification workflow
+# Maps session_id -> { temp_dir, extracted_data, instances, expires_at }
+# NOTE: In production, you'd want a more robust session store with TTL
+verification_sessions: Dict[str, Dict[str, Any]] = {}
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -63,6 +69,25 @@ class ProcessTripResponse(BaseModel):
     errors: Optional[List[str]] = None
 
 
+class ExtractedDataResponse(BaseModel):
+    """Response model for extraction endpoint - returns data for verification."""
+    status: str
+    message: str
+    session_id: Optional[str] = None
+    hinreise: Optional[Dict[str, Any]] = None
+    ruckreise: Optional[Dict[str, Any]] = None
+    hotel: Optional[Dict[str, Any]] = None
+    errors: Optional[List[str]] = None
+
+
+class VerifiedDataRequest(BaseModel):
+    """Request model for submitting verified data."""
+    session_id: str
+    hinreise: Dict[str, Any]
+    ruckreise: Dict[str, Any]
+    hotel: Dict[str, Any]
+
+
 class HealthResponse(BaseModel):
     """Response model for health check."""
     status: str
@@ -85,6 +110,266 @@ async def health_check():
         status="ok",
         message="AutoReceipt API is healthy"
     )
+
+
+@app.post("/api/extract-trip", response_model=ExtractedDataResponse)
+async def extract_trip(
+    # Antrag Upload
+    antrag_form: UploadFile = File(..., description="Dienstreiseantrag PDF form"),
+
+    # Flight receipts (any number)
+    flight_receipts: List[UploadFile] = File([], description="Any number of flight receipts"),
+
+    # Hotel / Conference receipts
+    hotel_receipts: List[UploadFile] = File([], description="Any number of hotel or conference receipts"),
+
+    # User profile data for prefilling (optional)
+    user_profile: Optional[str] = Form(None, description="User profile JSON for prefilling form fields"),
+):
+    """
+    Extract data from trip documents without filling PDF.
+    
+    This endpoint processes uploaded receipts through the AI pipeline
+    and returns extracted data for user verification before final PDF generation.
+    
+    Returns a session_id to be used with /api/submit-verified.
+    """
+    errors = []
+    session_id = str(uuid.uuid4())
+    
+    # Create a persistent temporary directory for this session
+    temp_dir = tempfile.mkdtemp(prefix=f"autoreceipt_{session_id}_")
+    
+    try:
+        # Save the Antrag form
+        uploads_dir = os.path.join(HERE, "uploads")
+        os.makedirs(uploads_dir, exist_ok=True)
+
+        antrag_path = os.path.join(uploads_dir, "Dienstreiseantrag.pdf")
+        contents = await antrag_form.read()
+        with open(antrag_path, "wb") as f:
+            f.write(contents)
+        print(f"Saved Dienstreiseantrag to {antrag_path}")
+
+        # Define file mappings for uploads
+        file_mappings = {}
+
+        for i, file in enumerate(flight_receipts, start=1):
+            file_mappings[f"Receipt_Flight{i}.pdf"] = file
+
+        for i, file in enumerate(hotel_receipts, start=1):
+            file_mappings[f"Receipt_Hotel{i}.pdf"] = file
+        
+        # Save uploaded files to temp directory
+        for filename, upload_file in file_mappings.items():
+            if upload_file is not None:
+                file_path = os.path.join(temp_dir, filename)
+                try:
+                    contents = await upload_file.read()
+                    with open(file_path, "wb") as f:
+                        f.write(contents)
+                    print(f"Saved {filename} to {file_path}")
+                except Exception as e:
+                    errors.append(f"Error saving {filename}: {str(e)}")
+        
+        # Parse user profile if provided
+        parsed_user_profile: Optional[Dict[str, Any]] = None
+        if user_profile:
+            try:
+                parsed_user_profile = json.loads(user_profile)
+                print(f"Received user profile for prefill: {list(parsed_user_profile.keys())}")
+                # Validate that no bank data is included
+                forbidden_fields = ['bic', 'iban', 'kreditinstitut', 'bank']
+                for field in forbidden_fields:
+                    if field in [k.lower() for k in parsed_user_profile.keys()]:
+                        print(f"WARNING: Rejecting forbidden field '{field}' from user profile")
+                        parsed_user_profile.pop(field, None)
+            except json.JSONDecodeError as e:
+                print(f"Warning: Could not parse user profile JSON: {e}")
+                parsed_user_profile = None
+        
+        # Run extraction pipeline (without PDF filling)
+        try:
+            # Step 1: Antrag processing
+            print("Starting Antrag extraction...")
+            antrag_instance = antrag(data_dir=temp_dir, user_profile=parsed_user_profile)
+            antrag_instance.main()
+            
+            # Step 2: Hinreise extraction (without PDF fill)
+            print("Starting Hinreise extraction...")
+            hinreise_instance = hinreise("", data_dir=temp_dir)
+            hinreise_data = hinreise_instance.main(fill_pdf=False)
+            
+            # Step 3: Ruckreise extraction (without PDF fill)
+            print("Starting Ruckreise extraction...")
+            ruckreise_instance = ruckreise(hinreise_instance.response, data_dir=temp_dir)
+            ruckreise_data = ruckreise_instance.main(fill_pdf=False)
+            
+            # Step 4: Hotel extraction (without PDF fill)
+            print("Starting Hotel extraction...")
+            hotel_instance = hotel(data_dir=temp_dir)
+            hotel_data = hotel_instance.main(fill_pdf=False)
+            
+        except Exception as e:
+            # Clean up on error
+            shutil.rmtree(temp_dir, ignore_errors=True)
+            errors.append(f"Pipeline processing error: {str(e)}")
+            return ExtractedDataResponse(
+                status="error",
+                message="Failed to extract trip data",
+                errors=errors
+            )
+        
+        # Store session data for later verification submission
+        verification_sessions[session_id] = {
+            "temp_dir": temp_dir,
+            "hinreise_instance": hinreise_instance,
+            "ruckreise_instance": ruckreise_instance,
+            "hotel_instance": hotel_instance,
+            "extracted_data": {
+                "hinreise": hinreise_data or {},
+                "ruckreise": ruckreise_data or {},
+                "hotel": hotel_data or {}
+            }
+        }
+        
+        print(f"Created verification session: {session_id}")
+        print(f"Hotel data extracted: {len(hotel_data) if hotel_data else 0} fields")
+        
+        return ExtractedDataResponse(
+            status="ok",
+            message="Data extracted successfully. Please verify and submit.",
+            session_id=session_id,
+            hinreise=hinreise_data or {},
+            ruckreise=ruckreise_data or {},
+            hotel=hotel_data or {},
+            errors=errors if errors else None
+        )
+        
+    except Exception as e:
+        # Clean up on error
+        shutil.rmtree(temp_dir, ignore_errors=True)
+        errors.append(f"Unexpected error: {str(e)}")
+        return ExtractedDataResponse(
+            status="error",
+            message="An unexpected error occurred during extraction",
+            errors=errors
+        )
+
+
+@app.post("/api/submit-verified", response_model=ProcessTripResponse)
+async def submit_verified(request: VerifiedDataRequest):
+    """
+    Submit verified data and generate the final PDF.
+    
+    This endpoint takes user-verified data from the verification screen
+    and generates the final filled PDF form.
+    """
+    errors = []
+    session_id = request.session_id
+    
+    # Check if session exists
+    if session_id not in verification_sessions:
+        raise HTTPException(
+            status_code=404,
+            detail="Session not found or expired. Please restart the process."
+        )
+    
+    session = verification_sessions[session_id]
+    
+    try:
+        templates_dir = os.path.join(HERE, "templates")
+        
+        # Fill PDF with verified data
+        print("Filling PDF with verified Hinreise data...")
+        hinreise_instance = session["hinreise_instance"]
+        # Fallback: Restore extracted_data from session if empty
+        if not hinreise_instance.extracted_data:
+            session_data = session.get('extracted_data', {}).get('hinreise', {})
+            if session_data:
+                print(f"FALLBACK: Restoring hinreise extracted_data from session ({len(session_data)} fields)")
+                hinreise_instance.extracted_data = session_data
+        hinreise_instance.fill_with_verified_data(request.hinreise)
+        
+        print("Filling PDF with verified Rückreise data...")
+        ruckreise_instance = session["ruckreise_instance"]
+        # Fallback: Restore extracted_data from session if empty
+        if not ruckreise_instance.extracted_data:
+            session_data = session.get('extracted_data', {}).get('ruckreise', {})
+            if session_data:
+                print(f"FALLBACK: Restoring ruckreise extracted_data from session ({len(session_data)} fields)")
+                ruckreise_instance.extracted_data = session_data
+        ruckreise_instance.fill_with_verified_data(request.ruckreise)
+        
+        print("Filling PDF with Hotel data...")
+        hotel_instance = session["hotel_instance"]
+        
+        # Ensure hotel_instance has extracted_data (fallback to session data)
+        if (not hotel_instance.extracted_data or len(hotel_instance.extracted_data) == 0):
+            session_hotel_data = session.get('extracted_data', {}).get('hotel', {})
+            if session_hotel_data:
+                print(f"Restoring hotel extracted_data from session ({len(session_hotel_data)} fields)")
+                hotel_instance.extracted_data = session_hotel_data
+        
+        # Use fill_pdf_directly - fills with stored extracted_data (no verification for now)
+        hotel_instance.fill_pdf_directly()
+        
+        # Check if filled form was created
+        filled_form_path = os.path.join(templates_dir, "filled_form.pdf")
+        if os.path.exists(filled_form_path):
+            # Copy to output directory
+            output_dir = os.path.join(HERE, "output")
+            os.makedirs(output_dir, exist_ok=True)
+            
+            output_filename = "output_form.pdf"
+            shutil.copy2(
+                filled_form_path,
+                os.path.join(output_dir, output_filename)
+            )
+            
+            # Clean up
+            uploads_dir = os.path.join(HERE, "uploads")
+            if os.path.exists(uploads_dir):
+                shutil.rmtree(uploads_dir)
+                print("Cleaned up uploads directory.")
+
+            if os.path.exists(filled_form_path):
+                os.remove(filled_form_path)
+            
+            # Clean up session
+            temp_dir = session.get("temp_dir")
+            if temp_dir and os.path.exists(temp_dir):
+                shutil.rmtree(temp_dir, ignore_errors=True)
+            del verification_sessions[session_id]
+            print(f"Cleaned up session: {session_id}")
+            
+            return ProcessTripResponse(
+                status="ok",
+                message="Verified data processed successfully",
+                filled_pdf=output_filename,
+                errors=errors if errors else None
+            )
+        else:
+            errors.append("Filled form was not generated")
+            return ProcessTripResponse(
+                status="error",
+                message="Processing completed but filled form was not generated",
+                errors=errors
+            )
+            
+    except Exception as e:
+        errors.append(f"Unexpected error: {str(e)}")
+        # Clean up session on error
+        if session_id in verification_sessions:
+            temp_dir = verification_sessions[session_id].get("temp_dir")
+            if temp_dir and os.path.exists(temp_dir):
+                shutil.rmtree(temp_dir, ignore_errors=True)
+            del verification_sessions[session_id]
+        return ProcessTripResponse(
+            status="error",
+            message="An unexpected error occurred",
+            errors=errors
+        )
 
 
 @app.post("/api/process-trip", response_model=ProcessTripResponse)

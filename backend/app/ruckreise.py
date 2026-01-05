@@ -19,6 +19,7 @@ class ruckreise:
         """
         self.response = response
         self.data_dir = data_dir
+        self.extracted_data = {}  # Will be populated by main()
         self._setup_gemini()
 
     def _setup_gemini(self):
@@ -106,8 +107,16 @@ class ruckreise:
             print(f"Error calling Gemini API with documents: {e}")
             return None
 
-    def main(self):
-        """Main execution block for ruckreise processing."""
+    def main(self, fill_pdf: bool = True):
+        """
+        Main execution block for ruckreise processing.
+        
+        Args:
+            fill_pdf: If True, fills the PDF immediately. If False, only extracts data.
+        
+        Returns:
+            dict: Extracted data if fill_pdf is False, None otherwise.
+        """
         # Gather all supported files from the data directory dynamically
         allowed_exts = {'.pdf', '.jpg', '.jpeg', '.png', '.gif', '.bmp', '.tiff'}
         all_document_paths = []
@@ -123,6 +132,8 @@ class ruckreise:
 
         if not all_document_paths:
             print(f"No supported documents found in {self.data_dir}")
+            self.extracted_data = {}
+            return {} if not fill_pdf else None
 
         multi_doc_prompt = """
             You are an expert at extracting travel expense details from receipts. 
@@ -167,20 +178,23 @@ class ruckreise:
                 - "þÿ\\u0000S\\u0000c\\u0000h\\u0000w\\u0000e\\u0000r\\u0000b\\u0000e\\u0000s\\u0000c\\u0000h\\u0000ä\\u0000d\\u0000i\\u0000g\\u0000t\\u0000_\\u0000R\\u0000ü\\u0000c\\u0000k\\u0000r\\u0000e\\u0000i\\u0000s\\u0000e": "(If the traveler is severely disabled for the return journey)"
         """
 
-        print("\nSending requests to Gemini API for multiple documents (images and PDFs) in a single call...")
+        print("\nSending requests to Gemini API for Rückreise extraction...")
         gemini_response_text = self.get_gemini_vision_response_multi_doc(all_document_paths, multi_doc_prompt)
-        print("\nSending requests to Gemini API for multiple documents (images and PDFs) in a single call...")
 
+        extracted_data = {}
         if gemini_response_text:
             print("\nGemini API Response:")
             cleaned_response = gemini_response_text.strip('```json\n').strip('\n```')
             try:
-                cleaned_response = json.loads(cleaned_response)
-                print(json.dumps(cleaned_response[0], indent=2, ensure_ascii=False))
-                print("\nFilling PDF form with extracted data...")
-                templates_dir = os.path.join(os.path.dirname(__file__), "templates")
-                filled_form_path = os.path.join(templates_dir, "filled_form.pdf")
-                fillpdfs.write_fillable_pdf(filled_form_path, filled_form_path, cleaned_response[0])
+                parsed_response = json.loads(cleaned_response)
+                extracted_data = parsed_response[0] if parsed_response else {}
+                print(json.dumps(extracted_data, indent=2, ensure_ascii=False))
+                
+                if fill_pdf:
+                    print("\nFilling PDF form with extracted data...")
+                    templates_dir = os.path.join(os.path.dirname(__file__), "templates")
+                    filled_form_path = os.path.join(templates_dir, "filled_form.pdf")
+                    fillpdfs.write_fillable_pdf(filled_form_path, filled_form_path, extracted_data)
             except json.JSONDecodeError as e:
                 print(f"Error decoding JSON response: {e}")
                 print("Raw Gemini Response:")
@@ -188,4 +202,35 @@ class ruckreise:
         else:
             print("\nFailed to get a response from Gemini API.")
 
+        self.extracted_data = extracted_data
         print("\nRuckreise Processing complete.")
+        
+        return extracted_data if not fill_pdf else None
+    
+    def fill_with_verified_data(self, verified_data: dict):
+        """
+        Fill PDF with user-verified data merged with original extracted data.
+        
+        The merge strategy:
+        - Start with ALL original extracted data (including costs)
+        - Override only the fields that were verified/edited by user
+        
+        Args:
+            verified_data: User-verified field values (only verifiable fields)
+        """
+        print("\nFilling PDF form with verified Rückreise data...")
+        
+        # Start with original extracted data (preserves costs and all other fields)
+        merged_data = dict(self.extracted_data) if hasattr(self, 'extracted_data') and self.extracted_data else {}
+        
+        # Override with verified values (only for verifiable fields)
+        for key, value in verified_data.items():
+            if value:  # Only override if user provided a value
+                merged_data[key] = value
+        
+        print(f"Merged data keys: {list(merged_data.keys())}")
+        
+        templates_dir = os.path.join(os.path.dirname(__file__), "templates")
+        filled_form_path = os.path.join(templates_dir, "filled_form.pdf")
+        fillpdfs.write_fillable_pdf(filled_form_path, filled_form_path, merged_data)
+        print("Rückreise verified data filled.")
