@@ -192,6 +192,34 @@ class hotel:
         print("\nHotel Processing complete.")
         return self.extracted_data
 
+    def fill_with_verified_data(self, verified_data: dict):
+        """
+        Fill PDF with user-verified data merged with original extracted data.
+        
+        The merge strategy:
+        - Start with ALL original extracted data (including costs)
+        - Override only the fields that were verified/edited by user
+        
+        Args:
+            verified_data: User-verified field values (only verifiable fields)
+        """
+        print("\nFilling PDF form with verified Hotel data...")
+        
+        # Start with original extracted data (preserves costs and all other fields)
+        merged_data = dict(self.extracted_data) if hasattr(self, 'extracted_data') and self.extracted_data else {}
+        
+        # Override with verified values (only for verifiable fields)
+        for key, value in verified_data.items():
+            if value:  # Only override if user provided a value
+                merged_data[key] = value
+        
+        print(f"Merged data keys: {list(merged_data.keys())}")
+        
+        templates_dir = os.path.join(os.path.dirname(__file__), "templates")
+        filled_form_path = os.path.join(templates_dir, "filled_form.pdf")
+        fillpdfs.write_fillable_pdf(filled_form_path, filled_form_path, merged_data)
+        print("Hotel verified data filled.")
+
     def fill_pdf_directly(self, data: dict = None):
         """
         Fill PDF with provided data or stored extracted_data.

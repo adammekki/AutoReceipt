@@ -140,6 +140,12 @@ async def extract_trip(
     # Create a persistent temporary directory for this session
     temp_dir = tempfile.mkdtemp(prefix=f"autoreceipt_{session_id}_")
     
+    # Create separate subdirectories for flight and hotel receipts
+    flight_dir = os.path.join(temp_dir, "flights")
+    hotel_dir = os.path.join(temp_dir, "hotels")
+    os.makedirs(flight_dir, exist_ok=True)
+    os.makedirs(hotel_dir, exist_ok=True)
+    
     try:
         # Save the Antrag form
         uploads_dir = os.path.join(HERE, "uploads")
@@ -151,21 +157,26 @@ async def extract_trip(
             f.write(contents)
         print(f"Saved Dienstreiseantrag to {antrag_path}")
 
-        # Define file mappings for uploads
-        file_mappings = {}
-
+        # Save flight receipts to flight_dir
         for i, file in enumerate(flight_receipts, start=1):
-            file_mappings[f"Receipt_Flight{i}.pdf"] = file
-
-        for i, file in enumerate(hotel_receipts, start=1):
-            file_mappings[f"Receipt_Hotel{i}.pdf"] = file
-        
-        # Save uploaded files to temp directory
-        for filename, upload_file in file_mappings.items():
-            if upload_file is not None:
-                file_path = os.path.join(temp_dir, filename)
+            if file is not None:
+                filename = f"Receipt_Flight{i}.pdf"
+                file_path = os.path.join(flight_dir, filename)
                 try:
-                    contents = await upload_file.read()
+                    contents = await file.read()
+                    with open(file_path, "wb") as f:
+                        f.write(contents)
+                    print(f"Saved {filename} to {file_path}")
+                except Exception as e:
+                    errors.append(f"Error saving {filename}: {str(e)}")
+        
+        # Save hotel receipts to hotel_dir
+        for i, file in enumerate(hotel_receipts, start=1):
+            if file is not None:
+                filename = f"Receipt_Hotel{i}.pdf"
+                file_path = os.path.join(hotel_dir, filename)
+                try:
+                    contents = await file.read()
                     with open(file_path, "wb") as f:
                         f.write(contents)
                     print(f"Saved {filename} to {file_path}")
@@ -195,19 +206,19 @@ async def extract_trip(
             antrag_instance = antrag(data_dir=temp_dir, user_profile=parsed_user_profile)
             antrag_instance.main()
             
-            # Step 2: Hinreise extraction (without PDF fill)
+            # Step 2: Hinreise extraction (without PDF fill) - uses flight receipts only
             print("Starting Hinreise extraction...")
-            hinreise_instance = hinreise("", data_dir=temp_dir)
+            hinreise_instance = hinreise("", data_dir=flight_dir)
             hinreise_data = hinreise_instance.main(fill_pdf=False)
             
-            # Step 3: Ruckreise extraction (without PDF fill)
+            # Step 3: Ruckreise extraction (without PDF fill) - uses flight receipts only
             print("Starting Ruckreise extraction...")
-            ruckreise_instance = ruckreise(hinreise_instance.response, data_dir=temp_dir)
+            ruckreise_instance = ruckreise(hinreise_instance.response, data_dir=flight_dir)
             ruckreise_data = ruckreise_instance.main(fill_pdf=False)
             
-            # Step 4: Hotel extraction (without PDF fill)
+            # Step 4: Hotel extraction (without PDF fill) - uses hotel receipts only
             print("Starting Hotel extraction...")
-            hotel_instance = hotel(data_dir=temp_dir)
+            hotel_instance = hotel(data_dir=hotel_dir)
             hotel_data = hotel_instance.main(fill_pdf=False)
             
         except Exception as e:
@@ -301,18 +312,15 @@ async def submit_verified(request: VerifiedDataRequest):
                 ruckreise_instance.extracted_data = session_data
         ruckreise_instance.fill_with_verified_data(request.ruckreise)
         
-        print("Filling PDF with Hotel data...")
+        print("Filling PDF with verified Hotel data...")
         hotel_instance = session["hotel_instance"]
-        
-        # Ensure hotel_instance has extracted_data (fallback to session data)
-        if (not hotel_instance.extracted_data or len(hotel_instance.extracted_data) == 0):
-            session_hotel_data = session.get('extracted_data', {}).get('hotel', {})
-            if session_hotel_data:
-                print(f"Restoring hotel extracted_data from session ({len(session_hotel_data)} fields)")
-                hotel_instance.extracted_data = session_hotel_data
-        
-        # Use fill_pdf_directly - fills with stored extracted_data (no verification for now)
-        hotel_instance.fill_pdf_directly()
+        # Fallback: Restore extracted_data from session if empty
+        if not hotel_instance.extracted_data:
+            session_data = session.get('extracted_data', {}).get('hotel', {})
+            if session_data:
+                print(f"FALLBACK: Restoring hotel extracted_data from session ({len(session_data)} fields)")
+                hotel_instance.extracted_data = session_data
+        hotel_instance.fill_with_verified_data(request.hotel)
         
         # Check if filled form was created
         filled_form_path = os.path.join(templates_dir, "filled_form.pdf")
