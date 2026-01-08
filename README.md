@@ -17,7 +17,7 @@
 **1. Clone the repository and navigate to the project root:**
 
 ```bash
-git clone <repository-url>
+git clone https://github.com/adammekki/AutoReceipt.git
 cd AutoReceipt
 ```
 
@@ -184,7 +184,7 @@ Optional parameters:
 
 ### Download Generated PDF
 ```
-GET /api/download/{filename}
+GET /api/download/Reisekostenabrechnung_ausgefuellt.pdf
 ```
 
 ---
