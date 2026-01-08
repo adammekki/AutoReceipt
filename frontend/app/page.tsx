@@ -7,13 +7,14 @@ import AntragUploadScreen from './screens/AntragUploadScreen';
 import FlightUploadScreen from './screens/FlightUploadScreen';
 import HotelUploadScreen from './screens/HotelUploadScreen';
 import ProcessingScreen from './screens/ProcessingScreen';
+import VerificationScreen from './screens/VerificationScreen';
 import CompletionScreen from './screens/CompletionScreen';
 import Navigation from '@/components/Navigation';
 
 const pageVariants = {
   initial: { opacity: 0, scale: 0.98 },
-  enter: { opacity: 1, scale: 1, transition: { duration: 0.35, ease: 'easeOut' } },
-  exit: { opacity: 0, scale: 0.98, transition: { duration: 0.35, ease: 'easeOut' } },
+  enter: { opacity: 1, scale: 1, transition: { duration: 0.35, ease: [0.25, 0.1, 0.25, 1] as const } },
+  exit: { opacity: 0, scale: 0.98, transition: { duration: 0.35, ease: [0.25, 0.1, 0.25, 1] as const } },
 };
 
 export default function Home() {
@@ -31,6 +32,8 @@ export default function Home() {
         return <HotelUploadScreen key="hotel-upload" />;
       case 'processing':
         return <ProcessingScreen key="processing" />;
+      case 'verification':
+        return <VerificationScreen key="verification" />;
       case 'complete':
         return <CompletionScreen key="complete" />;
       default:
