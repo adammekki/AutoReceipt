@@ -5,8 +5,6 @@ import google.generativeai as genai
 from dotenv import load_dotenv
 from PIL import Image
 from pdf2image import convert_from_path
-from fillpdf import fillpdfs
-
 
 class hotel:
     """
@@ -109,12 +107,9 @@ class hotel:
             print(f"Error calling Gemini API with documents: {e}")
             return None
 
-    def main(self, fill_pdf: bool = True):
+    def main(self):
         """
         Main execution block for hotel processing.
-        
-        Args:
-            fill_pdf: If True, fills the PDF immediately. If False, only extracts and returns data.
         
         Returns:
             dict: Extracted data (always returned for API compatibility)
@@ -148,19 +143,21 @@ class hotel:
         Output format: A JSON list where each element is a JSON object representing one receipt's extracted data.
 
         Required Fields for the receipt:
-        - "þÿ\\u0000G\\u0000e\\u0000s\\u0000c\\u0000h\\u0000ä\\u0000f\\u0000t\\u0000s\\u0000o\\u0000r\\u0000t\\u0000_\\u0000a\\u0000m": This is the date of arrival of the conference venue, here, put the date of arrival of the hotel.
-        - "þÿ\\u0000G\\u0000e\\u0000s\\u0000c\\u0000h\\u0000ä\\u0000f\\u0000t\\u0000s\\u0000o\\u0000r\\u0000t\\u0000_\\u0000U\\u0000h\\u0000r\\u0000z\\u0000e\\u0000i\\u0000t": This is the time of arrival of the conference venue, here, put the time of arrival of the hotel, or the check-in time for the hotel. If both are not available, put in 15:00.
-        - "þÿ\\u0000D\\u0000i\\u0000e\\u0000n\\u0000s\\u0000t\\u0000g\\u0000e\\u0000s\\u0000c\\u0000h\\u0000ä\\u0000f\\u0000t\\u0000_\\u0000a\\u0000m": This is the start date of the conference.
-        - "þÿ\\u0000D\\u0000i\\u0000e\\u0000n\\u0000s\\u0000t\\u0000g\\u0000e\\u0000s\\u0000c\\u0000h\\u0000ä\\u0000f\\u0000t\\u0000_\\u0000u\\u0000m": This is the start time of the conference.
-        - "þÿ\\u0000E\\u0000n\\u0000d\\u0000e\\u0000_\\u0000D\\u0000i\\u0000e\\u0000n\\u0000s\\u0000t\\u0000g\\u0000e\\u0000s\\u0000c\\u0000h\\u0000ä\\u0000f\\u0000t\\u0000_\\u0000a\\u0000m": This is the end date of the conference.
-        - "þÿ\\u0000E\\u0000n\\u0000d\\u0000e\\u0000_\\u0000D\\u0000i\\u0000e\\u0000n\\u0000s\\u0000t\\u0000g\\u0000e\\u0000s\\u0000c\\u0000h\\u0000ä\\u0000f\\u0000t\\u0000_\\u0000u\\u0000m": This is the end time of the conference.
-        - "þÿ\\u0000G\\u0000e\\u0000s\\u0000c\\u0000h\\u0000ä\\u0000f\\u0000t\\u0000s\\u0000k\\u0000o\\u0000r\\u0000t\\u0000_\\u0000K\\u0000o\\u0000s\\u0000t\\u0000e\\u0000n\\u0000_\\u0000U\\u0000n\\u0000t\\u0000e\\u0000r\\u0000k\\u0000u\\u0000n\\u0000f\\u0000t": This is the costs for accommodation including breakfast. If the room capacity is more than one person, divide the total cost by the number of persons to get the correct amount.
-        - "þÿ\\u0000G\\u0000e\\u0000s\\u0000c\\u0000h\\u0000ä\\u0000f\\u0000t\\u0000s\\u0000k\\u0000o\\u0000r\\u0000t\\u0000_\\u0000s\\u0000o\\u0000n\\u0000s\\u0000t\\u0000i\\u0000g\\u0000e\\u0000_\\u0000K\\u0000o\\u0000s\\u0000t\\u0000e\\u0000n": This is other costs (e.g. conference fee, parking fees...). This should be in euros, but if other currency is used, specify it. Make sure to specify the currency symbol of the amount. 
-        - "Bus Geschäftsort": This is a checkbox field, if bus or tram (Straßenbahn)is used for business travel, put "ja", else put "nein" (no other options).
-        - "þÿ\\u0000G\\u0000e\\u0000s\\u0000c\\u0000h\\u0000ä\\u0000f\\u0000t\\u0000s\\u0000k\\u0000o\\u0000r\\u0000t\\u0000_\\u0000F\\u0000a\\u0000h\\u0000r\\u0000t\\u0000k\\u0000o\\u0000s\\u0000t\\u0000e\\u0000n\\u0000_\\u0000B\\u0000a\\u0000h\\u0000n\\u0000_\\u0000S\\u0000t\\u0000r\\u0000a\\u0000ß\\u0000e\\u0000n\\u0000b\\u0000a\\u0000h\\u0000n": This is the costs for train or tram (Straßenbahn) tickets.
+        - "þÿ\u0000G\u0000e\u0000s\u0000c\u0000h\u0000ä\u0000f\u0000t\u0000s\u0000o\u0000r\u0000t\u0000_\u0000a\u0000m": This is the date of arrival of the conference venue, here, put the date of arrival of the hotel.
+        - "þÿ\u0000G\u0000e\u0000s\u0000c\u0000h\u0000ä\u0000f\u0000t\u0000s\u0000o\u0000r\u0000t\u0000_\u0000U\u0000h\u0000r\u0000z\u0000e\u0000i\u0000t": This is the time of arrival of the conference venue, here, put the time of arrival of the hotel, or the check-in time for the hotel. If both are not available, put in 15:00.
+        - "þÿ\u0000D\u0000i\u0000e\u0000n\u0000s\u0000t\u0000g\u0000e\u0000s\u0000c\u0000h\u0000ä\u0000f\u0000t\u0000_\u0000a\u0000m": This is the start date of the conference.
+        - "þÿ\u0000D\u0000i\u0000e\u0000n\u0000s\u0000t\u0000g\u0000e\u0000s\u0000c\u0000h\u0000ä\u0000f\u0000t\u0000_\u0000u\u0000m": This is the start time of the conference.
+        - "þÿ\u0000E\u0000n\u0000d\u0000e\u0000_\u0000D\u0000i\u0000e\u0000n\u0000s\u0000t\u0000g\u0000e\u0000s\u0000c\u0000h\u0000ä\u0000f\u0000t\u0000_\u0000a\u0000m": This is the end date of the conference.
+        - "þÿ\u0000E\u0000n\u0000d\u0000e\u0000_\u0000D\u0000i\u0000e\u0000n\u0000s\u0000t\u0000g\u0000e\u0000s\u0000c\u0000h\u0000ä\u0000f\u0000t\u0000_\u0000u\u0000m": This is the end time of the conference.
+        - "þÿ\u0000G\u0000e\u0000s\u0000c\u0000h\u0000ä\u0000f\u0000t\u0000s\u0000o\u0000r\u0000t\u0000_\u0000K\u0000o\u0000s\u0000t\u0000e\u0000n\u0000_\u0000U\u0000n\u0000t\u0000e\u0000r\u0000k\u0000u\u0000n\u0000f\u0000t": This is the costs for accommodation including breakfast. If the room capacity is more than one person, divide the total cost by the number of persons to get the correct amount.
+        - "þÿ\u0000G\u0000e\u0000s\u0000c\u0000h\u0000ä\u0000f\u0000t\u0000s\u0000o\u0000r\u0000t\u0000_\u0000s\u0000o\u0000n\u0000s\u0000t\u0000i\u0000g\u0000e\u0000_\u0000K\u0000o\u0000s\u0000t\u0000e\u0000n": This is other costs (e.g. conference fee, parking fees...). This should be in euros, but if other currency is used, specify it. Make sure to specify the currency symbol of the amount.
+        - "Bus Geschäftsort": This is a checkbox field, if bus or tram (Straßenbahn) is used for business travel, put "ja", else put "nein" (no other options).
+        - "þÿ\u0000G\u0000e\u0000s\u0000c\u0000h\u0000ä\u0000f\u0000t\u0000s\u0000o\u0000r\u0000t\u0000_\u0000F\u0000a\u0000h\u0000r\u0000t\u0000k\u0000o\u0000s\u0000t\u0000e\u0000n\u0000_\u0000B\u0000a\u0000h\u0000n\u0000_\u0000S\u0000t\u0000r\u0000a\u0000ß\u0000e\u0000n\u0000b\u0000a\u0000h\u0000n": This is the costs for train or tram (Straßenbahn) tickets.
         - "Sonstige Geschäftsort": This is a checkbox field, if other means of transport (e.g. taxi) is used for business travel, put "ja", else put "nein" (no other options).
-        - "þÿ\\u0000G\\u0000e\\u0000s\\u0000c\\u0000h\\u0000ä\\u0000f\\u0000t\\u0000s\\u0000k\\u0000o\\u0000r\\u0000t\\u0000_\\u0000F\\u0000a\\u0000h\\u0000r\\u0000t\\u0000k\\u0000o\\u0000s\\u0000t\\u0000e\\u0000n\\u0000_\\u0000s\\u0000o\\u0000n\\u0000s\\u0000t\\u0000i\\u0000g\\u0000e\\u0000s": This is the costs for other means of transport (e.g. taxi).
+        - "þÿ\u0000G\u0000e\u0000s\u0000c\u0000h\u0000ä\u0000f\u0000t\u0000s\u0000o\u0000r\u0000t\u0000_\u0000F\u0000a\u0000h\u0000r\u0000t\u0000k\u0000o\u0000s\u0000t\u0000e\u0000n\u0000_\u0000s\u0000o\u0000n\u0000s\u0000t\u0000i\u0000g\u0000e\u0000s": This is the costs for other means of transport (e.g. taxi).
         """
+
+        # Check that "ä" is accepted in the prompt, as in the terminal ä = e4
 
         print("\nSending requests to Gemini API for Hotel extraction...")
         gemini_response_text = self.get_gemini_vision_response_multi_doc(all_document_paths, multi_doc_prompt)
@@ -173,13 +170,6 @@ class hotel:
                 self.extracted_data = parsed_response[0] if parsed_response else {}
                 print(json.dumps(self.extracted_data, indent=2, ensure_ascii=False))
                 
-                if fill_pdf:
-                    print("\nFilling PDF form with extracted data...")
-                    templates_dir = os.path.join(os.path.dirname(__file__), "templates")
-                    filled_form_path = os.path.join(templates_dir, "filled_form.pdf")
-                    fillpdfs.write_fillable_pdf(filled_form_path, filled_form_path, self.extracted_data)
-                    print("Hotel data filled in PDF.")
-                    
             except json.JSONDecodeError as e:
                 print(f"Error decoding JSON response: {e}")
                 print("Raw Gemini Response:")
@@ -191,51 +181,3 @@ class hotel:
 
         print("\nHotel Processing complete.")
         return self.extracted_data
-
-    def fill_with_verified_data(self, verified_data: dict):
-        """
-        Fill PDF with user-verified data merged with original extracted data.
-        
-        The merge strategy:
-        - Start with ALL original extracted data (including costs)
-        - Override only the fields that were verified/edited by user
-        
-        Args:
-            verified_data: User-verified field values (only verifiable fields)
-        """
-        print("\nFilling PDF form with verified Hotel data...")
-        
-        # Start with original extracted data (preserves costs and all other fields)
-        merged_data = dict(self.extracted_data) if hasattr(self, 'extracted_data') and self.extracted_data else {}
-        
-        # Override with verified values (only for verifiable fields)
-        for key, value in verified_data.items():
-            if value:  # Only override if user provided a value
-                merged_data[key] = value
-        
-        print(f"Merged data keys: {list(merged_data.keys())}")
-        
-        templates_dir = os.path.join(os.path.dirname(__file__), "templates")
-        filled_form_path = os.path.join(templates_dir, "filled_form.pdf")
-        fillpdfs.write_fillable_pdf(filled_form_path, filled_form_path, merged_data)
-        print("Hotel verified data filled.")
-
-    def fill_pdf_directly(self, data: dict = None):
-        """
-        Fill PDF with provided data or stored extracted_data.
-        Simple direct filling without verification logic.
-        
-        Args:
-            data: Optional data dict. If None, uses self.extracted_data
-        """
-        fill_data = data if data is not None else self.extracted_data
-        
-        if not fill_data:
-            print("No data available to fill PDF.")
-            return
-        
-        print("\nFilling PDF form with hotel data...")
-        templates_dir = os.path.join(os.path.dirname(__file__), "templates")
-        filled_form_path = os.path.join(templates_dir, "filled_form.pdf")
-        fillpdfs.write_fillable_pdf(filled_form_path, filled_form_path, fill_data)
-        print("Hotel data filled in PDF.")

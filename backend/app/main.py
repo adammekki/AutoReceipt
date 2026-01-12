@@ -3,13 +3,6 @@ AutoReceipt FastAPI Backend
 
 This module provides the FastAPI application that exposes HTTP APIs
 to run the travel expense receipt processing pipeline.
-
-PRIVACY CONSTRAINTS (STRICT):
-- No user data may be stored on the server beyond request scope
-- No receipts or documents may be persisted
-- No bank data may be stored
-- User profile data is only used within the request and then discarded
-- This is a hard requirement due to GDPR and thesis design constraints
 """
 
 import os
@@ -23,6 +16,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from dotenv import load_dotenv
+from fillpdf import fillpdfs
 
 # Load environment variables
 load_dotenv()
@@ -51,7 +45,7 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "http://localhost:3000",  # Next.js default dev server
+        "http://localhost:3000",
         "http://127.0.0.1:3000",
         "http://localhost:3001",
     ],
@@ -160,7 +154,7 @@ async def extract_trip(
         # Save flight receipts to flight_dir
         for i, file in enumerate(flight_receipts, start=1):
             if file is not None:
-                filename = f"Receipt_Flight{i}.pdf"
+                filename = f"Receipt_Flight{i}.pdf" # do these have to be the names?
                 file_path = os.path.join(flight_dir, filename)
                 try:
                     contents = await file.read()
@@ -173,7 +167,7 @@ async def extract_trip(
         # Save hotel receipts to hotel_dir
         for i, file in enumerate(hotel_receipts, start=1):
             if file is not None:
-                filename = f"Receipt_Hotel{i}.pdf"
+                filename = f"Receipt_Hotel{i}.pdf" # do these have to be the names?
                 file_path = os.path.join(hotel_dir, filename)
                 try:
                     contents = await file.read()
@@ -190,7 +184,7 @@ async def extract_trip(
                 parsed_user_profile = json.loads(user_profile)
                 print(f"Received user profile for prefill: {list(parsed_user_profile.keys())}")
                 # Validate that no bank data is included
-                forbidden_fields = ['bic', 'iban', 'kreditinstitut', 'bank']
+                forbidden_fields = ['bic', 'iban', 'kreditinstitut', 'bank'] # are these even saved in the FE?
                 for field in forbidden_fields:
                     if field in [k.lower() for k in parsed_user_profile.keys()]:
                         print(f"WARNING: Rejecting forbidden field '{field}' from user profile")
@@ -208,18 +202,18 @@ async def extract_trip(
             
             # Step 2: Hinreise extraction (without PDF fill) - uses flight receipts only
             print("Starting Hinreise extraction...")
-            hinreise_instance = hinreise("", data_dir=flight_dir)
-            hinreise_data = hinreise_instance.main(fill_pdf=False)
+            hinreise_instance = hinreise(data_dir=flight_dir)
+            hinreise_data = hinreise_instance.main()
             
             # Step 3: Ruckreise extraction (without PDF fill) - uses flight receipts only
             print("Starting Ruckreise extraction...")
             ruckreise_instance = ruckreise(hinreise_instance.response, data_dir=flight_dir)
-            ruckreise_data = ruckreise_instance.main(fill_pdf=False)
+            ruckreise_data = ruckreise_instance.main()
             
             # Step 4: Hotel extraction (without PDF fill) - uses hotel receipts only
             print("Starting Hotel extraction...")
             hotel_instance = hotel(data_dir=hotel_dir)
-            hotel_data = hotel_instance.main(fill_pdf=False)
+            hotel_data = hotel_instance.main()
             
         except Exception as e:
             # Clean up on error
@@ -245,6 +239,8 @@ async def extract_trip(
         }
         
         print(f"Created verification session: {session_id}")
+        print(f"Hinreise data extracted: {len(hinreise_data) if hinreise_data else 0} fields")
+        print(f"Rückreise data extracted: {len(ruckreise_data) if ruckreise_data else 0} fields")
         print(f"Hotel data extracted: {len(hotel_data) if hotel_data else 0} fields")
         
         return ExtractedDataResponse(
@@ -267,6 +263,40 @@ async def extract_trip(
             errors=errors
         )
 
+def fill_pdf_with_verified_data(
+    extracted_data: dict,
+    verified_data: dict,
+    section_name: str
+) -> dict:
+    """
+    Merge extracted data with verified data and fill PDF.
+    
+    Args:
+        extracted_data: Original AI-extracted data
+        verified_data: User-verified/edited data
+        section_name: Name of section for logging (e.g., "Hinreise")
+    
+    Returns:
+        dict: The merged data that was written to PDF
+    """
+    print(f"\nFilling PDF form with verified {section_name} data...")
+    
+    # Start with original extracted data (preserves costs and all other fields)
+    merged_data = dict(extracted_data) if extracted_data else {}
+    
+    # Override with verified values (only for verifiable fields)
+    for key, value in verified_data.items():
+        if value:  # Only override if user provided a value
+            merged_data[key] = value
+    
+    print(f"Merged data keys: {list(merged_data.keys())}")
+    
+    templates_dir = os.path.join(HERE, "templates")
+    filled_form_path = os.path.join(templates_dir, "filled_form.pdf")
+    fillpdfs.write_fillable_pdf(filled_form_path, filled_form_path, merged_data)
+    
+    print(f"{section_name} verified data filled.")
+    return merged_data
 
 @app.post("/api/submit-verified", response_model=ProcessTripResponse)
 async def submit_verified(request: VerifiedDataRequest):
@@ -290,37 +320,26 @@ async def submit_verified(request: VerifiedDataRequest):
     
     try:
         templates_dir = os.path.join(HERE, "templates")
+        extracted = session["extracted_data"]
         
-        # Fill PDF with verified data
-        print("Filling PDF with verified Hinreise data...")
-        hinreise_instance = session["hinreise_instance"]
-        # Fallback: Restore extracted_data from session if empty
-        if not hinreise_instance.extracted_data:
-            session_data = session.get('extracted_data', {}).get('hinreise', {})
-            if session_data:
-                print(f"FALLBACK: Restoring hinreise extracted_data from session ({len(session_data)} fields)")
-                hinreise_instance.extracted_data = session_data
-        hinreise_instance.fill_with_verified_data(request.hinreise)
+        # Fill PDF with verified data for each section
+        fill_pdf_with_verified_data(
+            extracted.get("hinreise", {}),
+            request.hinreise,
+            "Hinreise"
+        )
         
-        print("Filling PDF with verified Rückreise data...")
-        ruckreise_instance = session["ruckreise_instance"]
-        # Fallback: Restore extracted_data from session if empty
-        if not ruckreise_instance.extracted_data:
-            session_data = session.get('extracted_data', {}).get('ruckreise', {})
-            if session_data:
-                print(f"FALLBACK: Restoring ruckreise extracted_data from session ({len(session_data)} fields)")
-                ruckreise_instance.extracted_data = session_data
-        ruckreise_instance.fill_with_verified_data(request.ruckreise)
+        fill_pdf_with_verified_data(
+            extracted.get("ruckreise", {}),
+            request.ruckreise,
+            "Rückreise"
+        )
         
-        print("Filling PDF with verified Hotel data...")
-        hotel_instance = session["hotel_instance"]
-        # Fallback: Restore extracted_data from session if empty
-        if not hotel_instance.extracted_data:
-            session_data = session.get('extracted_data', {}).get('hotel', {})
-            if session_data:
-                print(f"FALLBACK: Restoring hotel extracted_data from session ({len(session_data)} fields)")
-                hotel_instance.extracted_data = session_data
-        hotel_instance.fill_with_verified_data(request.hotel)
+        fill_pdf_with_verified_data(
+            extracted.get("hotel", {}),
+            request.hotel,
+            "Hotel"
+        )
         
         # Check if filled form was created
         filled_form_path = os.path.join(templates_dir, "filled_form.pdf")
@@ -378,178 +397,6 @@ async def submit_verified(request: VerifiedDataRequest):
             message="An unexpected error occurred",
             errors=errors
         )
-
-
-@app.post("/api/process-trip", response_model=ProcessTripResponse)
-async def process_trip(
-
-    # Antrag Upload
-    antrag_form: UploadFile = File(..., description="Dienstreiseantrag PDF form"),
-
-    # Flight receipts (any number)
-    flight_receipts: List[UploadFile] = File([], description="Any number of flight receipts"),
-
-    # Hotel / Conference receipts
-    hotel_receipts: List[UploadFile] = File([], description="Any number of hotel or conference receipts"),
-
-    # User profile data for prefilling (optional)
-    # Sent as JSON string to be parsed
-    user_profile: Optional[str] = Form(None, description="User profile JSON for prefilling form fields"),
-
-):
-    """
-    Process a complete trip expense report.
-    
-    This endpoint accepts uploaded PDF receipts, processes them through
-    the AI pipeline (Gemini), and generates a filled expense report PDF.
-    
-    Required files:
-    - dienstreiseantrag: The Dienstreiseantrag PDF form with applicant data
-    - reisekostenabrechnung: The Reisekostenabrechnung template to fill
-    
-    Optional receipts:
-    - receipt_flight1, receipt_flight2, receipt_flight3: Flight receipts
-    - receipt_parking: Parking receipt
-    - payment_conference, receipt_conference: Conference-related receipts
-    - payment_parking: Parking payment
-    - receipt_hotel: Hotel receipt
-    """
-    errors = []
-    
-    # Create a temporary directory for processing
-    with tempfile.TemporaryDirectory() as temp_dir:
-        try:
-            # Save the Antrag form the uploads dir
-            uploads_dir = os.path.join(HERE, "uploads")
-            templates_dir = os.path.join(HERE, "templates")
-            os.makedirs(uploads_dir, exist_ok=True)
-
-            antrag_path = os.path.join(uploads_dir, "Dienstreiseantrag.pdf")
-            contents = await antrag_form.read()
-            with open(antrag_path, "wb") as f:
-                f.write(contents)
-            print(f"Saved Dienstreiseantrag to {antrag_path}")
-
-            # Define file mappings for uploads
-            file_mappings = {}
-
-            for i, file in enumerate(flight_receipts, start=1):
-                file_mappings[f"Receipt_Flight{i}.pdf"] = file
-
-            for i, file in enumerate(hotel_receipts, start=1):
-                file_mappings[f"Receipt_Hotel{i}.pdf"] = file
-            
-            # Save uploaded files to temp directory
-            for filename, upload_file in file_mappings.items():
-                if upload_file is not None:
-                    file_path = os.path.join(temp_dir, filename)
-                    try:
-                        contents = await upload_file.read()
-                        with open(file_path, "wb") as f:
-                            f.write(contents)
-                        print(f"Saved {filename} to {file_path}")
-                    except Exception as e:
-                        errors.append(f"Error saving {filename}: {str(e)}")
-            
-            # Run the processing pipeline
-            try:
-                # Parse user profile if provided
-                # PRIVACY: This data is used only within this request scope
-                # and is never persisted to any storage
-                parsed_user_profile: Optional[Dict[str, Any]] = None
-                if user_profile:
-                    try:
-                        parsed_user_profile = json.loads(user_profile)
-                        print(f"Received user profile for prefill: {list(parsed_user_profile.keys())}")
-                        # Validate that no bank data is included (extra safety check)
-                        forbidden_fields = ['bic', 'iban', 'kreditinstitut', 'bank']
-                        for field in forbidden_fields:
-                            if field in [k.lower() for k in parsed_user_profile.keys()]:
-                                print(f"WARNING: Rejecting forbidden field '{field}' from user profile")
-                                parsed_user_profile.pop(field, None)
-                    except json.JSONDecodeError as e:
-                        print(f"Warning: Could not parse user profile JSON: {e}")
-                        parsed_user_profile = None
-                
-                # Step 1: Antrag processing with user profile prefill
-                print("Starting Antrag process...")
-                antrag_instance = antrag(data_dir=temp_dir, user_profile=parsed_user_profile)
-                antrag_instance.main()
-                
-                # Step 2: Hinreise processing
-                print("Starting Hinreise process...")
-                hinreise_instance = hinreise("", data_dir=temp_dir)
-                hinreise_instance.main()
-                
-                # Step 3: Ruckreise processing
-                print("Starting Ruckreise process...")
-                ruckreise_instance = ruckreise(hinreise_instance.response, data_dir=temp_dir)
-                ruckreise_instance.main()
-                
-                # Step 4: Hotel processing
-                print("Starting Hotel process...")
-                hotel_instance = hotel(data_dir=temp_dir)
-                hotel_instance.main()
-                
-            except Exception as e:
-                errors.append(f"Pipeline processing error: {str(e)}")
-                return ProcessTripResponse(
-                    status="error",
-                    message="Failed to process trip expenses",
-                    errors=errors
-                )
-            
-            # Check if filled form was created
-            filled_form_path = os.path.join(templates_dir, "filled_form.pdf")
-            if os.path.exists(filled_form_path):
-                # Copy to a permanent location for download
-                # In production, you'd want to store this more permanently
-                output_dir = os.path.join(HERE, "output")
-                os.makedirs(output_dir, exist_ok=True)
-                
-                output_filename = "output_form.pdf"
-                shutil.copy2(
-                    os.path.join(templates_dir, "filled_form.pdf"),
-                    os.path.join(output_dir, output_filename)
-                )
-                # Clean up uploads directory
-                if os.path.exists(uploads_dir):
-                    shutil.rmtree(uploads_dir)
-                    print("Cleaned up uploads directory.")
-
-                if os.path.exists(os.path.join(templates_dir, "filled_form.pdf")):
-                    os.remove(os.path.join(templates_dir, "filled_form.pdf"))
-                
-                return ProcessTripResponse(
-                    status="ok",
-                    message="Trip expenses processed successfully",
-                    filled_pdf=output_filename,
-                    errors=errors if errors else None
-                )
-            else:
-                # Clean up uploads directory
-                if os.path.exists(uploads_dir):
-                    shutil.rmtree(uploads_dir)
-                    print("Cleaned up uploads directory.")
-
-                if os.path.exists(os.path.join(templates_dir, "filled_form.pdf")):
-                    os.remove(os.path.join(templates_dir, "filled_form.pdf"))
-
-                errors.append("Filled form was not generated")
-                return ProcessTripResponse(
-                    status="error",
-                    message="Processing completed but filled form was not generated",
-                    errors=errors
-                )
-                
-        except Exception as e:
-            errors.append(f"Unexpected error: {str(e)}")
-            return ProcessTripResponse(
-                status="error",
-                message="An unexpected error occurred",
-                errors=errors
-            )
-
 
 @app.get("/api/download")
 async def download_filled_form(background_tasks: BackgroundTasks):

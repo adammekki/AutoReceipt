@@ -5,8 +5,6 @@ import google.generativeai as genai
 from dotenv import load_dotenv
 from PIL import Image
 from pdf2image import convert_from_path
-from fillpdf import fillpdfs
-
 
 class ruckreise:
     def __init__(self, response, data_dir: str = "."):
@@ -107,15 +105,12 @@ class ruckreise:
             print(f"Error calling Gemini API with documents: {e}")
             return None
 
-    def main(self, fill_pdf: bool = True):
+    def main(self):
         """
         Main execution block for ruckreise processing.
         
-        Args:
-            fill_pdf: If True, fills the PDF immediately. If False, only extracts data.
-        
         Returns:
-            dict: Extracted data if fill_pdf is False, None otherwise.
+            dict: Extracted data
         """
         # Gather all supported files from the data directory dynamically
         allowed_exts = {'.pdf', '.jpg', '.jpeg', '.png', '.gif', '.bmp', '.tiff'}
@@ -133,9 +128,13 @@ class ruckreise:
         if not all_document_paths:
             print(f"No supported documents found in {self.data_dir}")
             self.extracted_data = {}
-            return {} if not fill_pdf else None
+            return {}
+        
+        context = context = ""
+        if self.hinreise_data:
+            context = f"{json.dumps(self.hinreise_data, ensure_ascii=False)}\n"
 
-        multi_doc_prompt = """
+        multi_doc_prompt = rf"""
             You are an expert at extracting travel expense details from receipts. 
             You will be provided with one or more document images (converted from original images or PDF pages), 
             as well as the JSON output of the outbound journey (Hinreise). Using this information, 
@@ -153,30 +152,33 @@ class ruckreise:
             If it only represents the outbound trip (Hinreise), ignore it. 
             If it only represents the return trip (Rückreise), extract it normally.
 
-            You are also given the Hinreise JSON output to help identify overlapping information and prevent duplication.
+            You are also given the Hinreise JSON output to help identify overlapping information and prevent duplication:
+            {context}
 
             Output format:
             A JSON list containing exactly one JSON object with the following UTF-16 encoded keys:
 
             Required Fields for the receipt:
-                - "þÿ\\u0000R\\u0000ü\\u0000c\\u0000k\\u0000r\\u0000e\\u0000i\\u0000s\\u0000e\\u0000 \\u0000v\\u0000o\\u0000n": "(Origin city/location of the return journey, e.g., 'Bangkok')"
-                - "þÿ\\u0000R\\u0000ü\\u0000c\\u0000k\\u0000r\\u0000e\\u0000i\\u0000s\\u0000e\\u0000 \\u0000n\\u0000a\\u0000c\\u0000h": "(Destination city/location of the return journey, e.g., 'Blaustein-Arnegg')"
-                - "þÿ\\u0000R\\u0000ü\\u0000c\\u0000k\\u0000r\\u0000e\\u0000i\\u0000s\\u0000e\\u0000 \\u0000a\\u0000m": "(Start date of the return journey, format: DD.MM.YYYY, e.g., '22.12.2024')"
-                - "þÿ\\u0000R\\u0000ü\\u0000c\\u0000k\\u0000r\\u0000e\\u0000i\\u0000s\\u0000e\\u0000 \\u0000U\\u0000h\\u0000r\\u0000z\\u0000e\\u0000i\\u0000t": "(Start time of the return journey, format: HH:MM, e.g., '23:30')"
-                - "þÿ\\u0000R\\u0000ü\\u0000c\\u0000k\\u0000r\\u0000e\\u0000i\\u0000s\\u0000e\\u0000 \\u0000E\\u0000n\\u0000d\\u0000e\\u0000 \\u0000a\\u0000m": "(End date of the return journey, format: DD.MM.YYYY, e.g., '23.12.2024')"
-                - "þÿ\\u0000R\\u0000ü\\u0000c\\u0000k\\u0000r\\u0000e\\u0000i\\u0000s\\u0000e\\u0000 \\u0000E\\u0000n\\u0000d\\u0000e\\u0000 \\u0000U\\u0000h\\u0000r\\u0000z\\u0000e\\u0000i\\u0000t": "(End time of the return journey, format: HH:MM, e.g., '10:00')"
+               Required Fields for the receipt:
+                - "þÿ\u0000R\u0000ü\u0000c\u0000k\u0000r\u0000e\u0000i\u0000s\u0000e\u0000 \u0000v\u0000o\u0000n": "(Origin city/location of the return journey, e.g., 'Bangkok')"
+                - "þÿ\u0000R\u0000ü\u0000c\u0000k\u0000r\u0000e\u0000i\u0000s\u0000e\u0000 \u0000n\u0000a\u0000c\u0000h": "(Destination city/location of the return journey, e.g., 'Blaustein-Arnegg')"
+                - "þÿ\u0000R\u0000ü\u0000c\u0000k\u0000r\u0000e\u0000i\u0000s\u0000e\u0000 \u0000a\u0000m": "(Start date of the return journey, format: DD.MM.YYYY, e.g., '22.12.2024')"
+                - "þÿ\u0000R\u0000ü\u0000c\u0000k\u0000r\u0000e\u0000i\u0000s\u0000e\u0000 \u0000U\u0000h\u0000r\u0000z\u0000e\u0000i\u0000t": "(Start time of the return journey, format: HH:MM, e.g., '23:30')"
+                - "þÿ\u0000R\u0000ü\u0000c\u0000k\u0000r\u0000e\u0000i\u0000s\u0000e\u0000 \u0000E\u0000n\u0000d\u0000e\u0000 \u0000a\u0000m": "(End date of the return journey, format: DD.MM.YYYY, e.g., '23.12.2024')"
+                - "þÿ\u0000R\u0000ü\u0000c\u0000k\u0000r\u0000e\u0000i\u0000s\u0000e\u0000 \u0000E\u0000n\u0000d\u0000e\u0000 \u0000U\u0000h\u0000r\u0000z\u0000e\u0000i\u0000t": "(End time of the return journey, format: HH:MM, e.g., '10:00')"
                 - "Rückreise_Ort": "(Specific location of arrival, e.g., 'Wohnung', 'Dienststelle')"
                 - "Verkehrsmittel Rückreise": "(Primary mode of transport, e.g., 'Flugzeug', 'Bahn', 'Eigenes_KfZ', 'Fahrgemeinschaft', 'Bus_Bahn_Strassenbahn', 'Schiff', 'Sonstiges')"
                 - "Klasse Rückreise": "(Class of travel, choices are 'Klasse 1', 'Klasse 2'. Leave empty if not specified)"
-                - "þÿ\\u0000F\\u0000l\\u0000u\\u0000g\\u0000z\\u0000e\\u0000u\\u0000g\\u0000_\\u0000R\\u0000ü\\u0000c\\u0000k\\u0000r\\u0000e\\u0000i\\u0000s\\u0000e": "(Cost for air travel on the return journey. If both Hin- and Rückflug on one receipt, divide by 2. Format: '717,31€'). This cannot be left empty."
-                - "þÿ\\u0000B\\u0000a\\u0000h\\u0000n\\u0000_\\u00001\\u0000u\\u00002\\u0000_\\u0000K\\u0000l\\u0000a\\u0000s\\u0000s\\u0000e\\u0000_\\u0000R\\u0000ü\\u0000c\\u0000k\\u0000r\\u0000e\\u0000i\\u0000s\\u0000e": "(Cost for train travel on the return journey, e.g., '44,00€' or '1. Klasse')"
-                - "þÿ\\u0000E\\u0000i\\u0000g\\u0000e\\u0000n\\u0000e\\u0000s\\u0000_\\u0000K\\u0000f\\u0000Z\\u0000_\\u0000R\\u0000ü\\u0000c\\u0000k\\u0000r\\u0000e\\u0000i\\u0000s\\u0000e": "(Details for personal car usage, e.g., '174km')"
-                - "þÿ\\u0000D\\u0000i\\u0000e\\u0000n\\u0000s\\u0000t\\u0000w\\u0000a\\u0000g\\u0000e\\u0000n\\u0000_\\u0000R\\u0000ü\\u0000c\\u0000k\\u0000r\\u0000e\\u0000i\\u0000s\\u0000e": "(Details for company car usage)"
-                - "þÿ\\u0000F\\u0000a\\u0000h\\u0000r\\u0000g\\u0000e\\u0000m\\u0000e\\u0000i\\u0000n\\u0000s\\u0000c\\u0000h\\u0000a\\u0000f\\u0000t\\u0000_\\u0000R\\u0000ü\\u0000c\\u0000k\\u0000r\\u0000e\\u0000i\\u0000s\\u0000e": "(If part of a carpool for the return journey, e.g., 'Fahrgemeinschaft')"
-                - "þÿ\\u0000S\\u0000o\\u0000n\\u0000s\\u0000t\\u0000i\\u0000g\\u0000e\\u0000s\\u0000_\\u0000R\\u0000ü\\u0000c\\u0000k\\u0000r\\u0000e\\u0000i\\u0000s\\u0000e": "(Any other relevant notes or costs for the return journey, e.g., 'Taxi 25€')"
-                - "þÿ\\u0000B\\u0000u\\u0000s\\u0000_\\u0000B\\u0000a\\u0000h\\u0000n\\u0000_\\u0000S\\u0000t\\u0000r\\u0000a\\u0000ß\\u0000e\\u0000n\\u0000b\\u0000a\\u0000h\\u0000n\\u0000_\\u0000R\\u0000ü\\u0000c\\u0000k\\u0000r\\u0000e\\u0000i\\u0000s\\u0000e": "(Cost for local transport on the return journey, e.g., '15,00€ (Parken)')"
-                - "þÿ\\u0000S\\u0000c\\u0000h\\u0000w\\u0000e\\u0000r\\u0000b\\u0000e\\u0000s\\u0000c\\u0000h\\u0000ä\\u0000d\\u0000i\\u0000g\\u0000t\\u0000_\\u0000R\\u0000ü\\u0000c\\u0000k\\u0000r\\u0000e\\u0000i\\u0000s\\u0000e": "(If the traveler is severely disabled for the return journey)"
+                - "þÿ\u0000F\u0000l\u0000u\u0000g\u0000z\u0000e\u0000u\u0000g\u0000_\u0000R\u0000ü\u0000c\u0000k\u0000r\u0000e\u0000i\u0000s\u0000e": "(Cost for air travel on the return journey. If both Hin- and Rückflug on one receipt, divide by 2. Format: '717,31€'). This cannot be left empty."
+                - "þÿ\u0000B\u0000a\u0000h\u0000n\u0000_\u00001\u0000u\u00002\u0000_\u0000K\u0000l\u0000a\u0000s\u0000s\u0000e\u0000_\u0000R\u0000ü\u0000c\u0000k\u0000r\u0000e\u0000i\u0000s\u0000e": "(Cost for train travel on the return journey, e.g., '44,00€' or '1. Klasse')"
+                - "þÿ\u0000E\u0000i\u0000g\u0000e\u0000n\u0000e\u0000s\u0000_\u0000K\u0000f\u0000Z\u0000_\u0000R\u0000ü\u0000c\u0000k\u0000r\u0000e\u0000i\u0000s\u0000e": "(Details for personal car usage, e.g., '174km')"
+                - "þÿ\u0000D\u0000i\u0000e\u0000n\u0000s\u0000t\u0000w\u0000a\u0000g\u0000e\u0000n\u0000_\u0000R\u0000ü\u0000c\u0000k\u0000r\u0000e\u0000i\u0000s\u0000e": "(Details for company car usage)"
+                - "þÿ\u0000F\u0000a\u0000h\u0000r\u0000g\u0000e\u0000m\u0000e\u0000i\u0000n\u0000s\u0000c\u0000h\u0000a\u0000f\u0000t\u0000_\u0000R\u0000ü\u0000c\u0000k\u0000r\u0000e\u0000i\u0000s\u0000e": "(If part of a carpool for the return journey, e.g., 'Fahrgemeinschaft')"
+                - "þÿ\u0000S\u0000o\u0000n\u0000s\u0000t\u0000i\u0000g\u0000e\u0000s\u0000_\u0000R\u0000ü\u0000c\u0000k\u0000r\u0000e\u0000i\u0000s\u0000e": "(Any other relevant notes or costs for the return journey, e.g., 'Taxi 25€')"
+                - "þÿ\u0000B\u0000u\u0000s\u0000_\u0000B\u0000a\u0000h\u0000n\u0000_\u0000S\u0000t\u0000r\u0000a\u0000ß\u0000e\u0000n\u0000b\u0000a\u0000h\u0000n\u0000_\u0000R\u0000ü\u0000c\u0000k\u0000r\u0000e\u0000i\u0000s\u0000e": "(Cost for local transport on the return journey, e.g., '15,00€ (Parken)')"
+                - "þÿ\u0000S\u0000c\u0000h\u0000w\u0000e\u0000r\u0000b\u0000e\u0000s\u0000c\u0000h\u0000ä\u0000d\u0000i\u0000g\u0000t\u0000_\u0000R\u0000ü\u0000c\u0000k\u0000r\u0000e\u0000i\u0000s\u0000e": "(If the traveler is severely disabled for the return journey)"
         """
+
 
         print("\nSending requests to Gemini API for Rückreise extraction...")
         gemini_response_text = self.get_gemini_vision_response_multi_doc(all_document_paths, multi_doc_prompt)
@@ -190,11 +192,6 @@ class ruckreise:
                 extracted_data = parsed_response[0] if parsed_response else {}
                 print(json.dumps(extracted_data, indent=2, ensure_ascii=False))
                 
-                if fill_pdf:
-                    print("\nFilling PDF form with extracted data...")
-                    templates_dir = os.path.join(os.path.dirname(__file__), "templates")
-                    filled_form_path = os.path.join(templates_dir, "filled_form.pdf")
-                    fillpdfs.write_fillable_pdf(filled_form_path, filled_form_path, extracted_data)
             except json.JSONDecodeError as e:
                 print(f"Error decoding JSON response: {e}")
                 print("Raw Gemini Response:")
@@ -205,32 +202,4 @@ class ruckreise:
         self.extracted_data = extracted_data
         print("\nRuckreise Processing complete.")
         
-        return extracted_data if not fill_pdf else None
-    
-    def fill_with_verified_data(self, verified_data: dict):
-        """
-        Fill PDF with user-verified data merged with original extracted data.
-        
-        The merge strategy:
-        - Start with ALL original extracted data (including costs)
-        - Override only the fields that were verified/edited by user
-        
-        Args:
-            verified_data: User-verified field values (only verifiable fields)
-        """
-        print("\nFilling PDF form with verified Rückreise data...")
-        
-        # Start with original extracted data (preserves costs and all other fields)
-        merged_data = dict(self.extracted_data) if hasattr(self, 'extracted_data') and self.extracted_data else {}
-        
-        # Override with verified values (only for verifiable fields)
-        for key, value in verified_data.items():
-            if value:  # Only override if user provided a value
-                merged_data[key] = value
-        
-        print(f"Merged data keys: {list(merged_data.keys())}")
-        
-        templates_dir = os.path.join(os.path.dirname(__file__), "templates")
-        filled_form_path = os.path.join(templates_dir, "filled_form.pdf")
-        fillpdfs.write_fillable_pdf(filled_form_path, filled_form_path, merged_data)
-        print("Rückreise verified data filled.")
+        return extracted_data

@@ -5,7 +5,6 @@ import google.generativeai as genai
 from dotenv import load_dotenv
 from PIL import Image
 from pdf2image import convert_from_path
-from fillpdf import fillpdfs
 
 
 class hinreise:
@@ -14,10 +13,8 @@ class hinreise:
         Initialize hinreise with a response and data directory.
         
         Args:
-            response: Initial response value
             data_dir: Directory where PDF files are located
         """
-        self.response = response
         self.data_dir = data_dir
         self.extracted_data = {}  # Will be populated by main()
         self._setup_gemini()
@@ -107,15 +104,13 @@ class hinreise:
             print(f"Error calling Gemini API with documents: {e}")
             return None
 
-    def main(self, fill_pdf: bool = True):
+    def main(self):
         """
         Main execution block for hinreise processing.
-        
-        Args:
-            fill_pdf: If True, fills the PDF immediately. If False, only extracts data.
+        Extracts data from documents for verification.
         
         Returns:
-            dict: Extracted data if fill_pdf is False, None otherwise.
+            dict: Extracted data for user verification.
         """
         # Gather all supported files from the data directory dynamically
         allowed_exts = {'.pdf', '.jpg', '.jpeg', '.png', '.gif', '.bmp', '.tiff'}
@@ -134,14 +129,12 @@ class hinreise:
             print(f"No supported documents found in {self.data_dir}")
             self.extracted_data = {}
             self.response = None
-            return {} if not fill_pdf else None
+            return {}
 
         multi_doc_prompt = """
-        You are an expert at extracting travel expense details from receipts. You will be provided with one or more document images (converted from original images or PDF pages). For each document, extract the following information and return it as a JSON object within a list. The JSON keys MUST exactly match the specified field names below. If a field cannot be found or is not applicable for a specific receipt, return its value as null for that receipt. For amounts, extract the numerical value followed by the currency symbol. If there are several documents, infer the data that is likely to be connected and merge them together into one output. Instead of using None, use empty string.
+        You are an expert at extracting travel expense details from receipts. You will be provided with one or more document images (converted from original images or PDF pages). For each document, extract the following information and return it as a JSON object within a list. The JSON keys MUST exactly match the specified field names below. If a field cannot be found or is not applicable for a specific receipt, return its value as empty string for that receipt. For amounts, extract the numerical value followed by the currency symbol. If there are several documents, infer the data that is likely to be connected and merge them together into one output.
 
         If a receipt represents both the outbound and return journeys (e.g., a roundtrip flight ticket covering both Hin- und Rückflug), **split the cost evenly** between Hinreise and Rückreise, dividing the total by two.
-
-        If the receipt only covers the return trip (Rückreise to Germany), ignore it.
 
         Output format: A JSON list where each element is a JSON object representing one receipt's extracted data.
 
@@ -151,18 +144,18 @@ class hinreise:
         - Hinreise_Beginn: (Start date of the outbound journey, format: DD.MM.YYYY, e.g., "12.12.2024")
         - Hinreise_Uhrzeit: (Start time of the outbound journey, format: HH:MM, e.g., "17:00")
         - Hinreise_Ort: (Specific location of departure, either 'Wohnung', 'Dienststelle')
-        - Hinreise_Urlaubsort: (If the outbound journey ends at a vacation spot before the official trip, otherwise null)
+        - Hinreise_Urlaubsort: (If the outbound journey ends at a vacation spot before the official trip, otherwise empty string)
         - Verkehrsmittel Hinreise: (Primary mode of transport for the outbound journey, e.g., "Flugzeug", "Bahn", "Eigenes_KfZ", "Fahrgemeinschaft", "Bus_Bahn_Strassenbahn", "Schiff", "Sonstiges")
-        - Klasse Hinreise: (Class of travel if applicable, either 'Klasse 2', 'Klasse 1'. If not specified, null.)
-        - Flugzeug_Hinreise: (Cost for air travel on the outbound journey. Extract numerical value followed by currency symbol, e.g., "1234,56€". This can not be left null)
+        - Klasse Hinreise: (Class of travel if applicable, either 'Klasse 2', 'Klasse 1'. If not specified, use empty string.)
+        - Flugzeug_Hinreise: (Cost for air travel on the outbound journey. Extract numerical value followed by currency symbol, e.g., "1234,56€". This can not be left empty)
         - Bahn_1u2_Klasse_Hinreise: (Cost for train travel on the outbound journey, including class details. Extract numerical value followed by currency symbol, e.g., "44,00€" or "1. Klasse")
         - Eigenes_KfZ_Hinreise: (Details for personal car usage on the outbound journey. Extract distance in km and any parking notes, e.g., "88km Parken Freising")
-        - Dienstwagen_Hinreise: (Details for company car usage on the outbound journey, if applicable. Otherwise null.)
-        - Fahrgemeinschaft Hinreise: (If part of a carpool for the outbound journey, state "Fahrgemeinschaft". Otherwise null.)
+        - Dienstwagen_Hinreise: (Details for company car usage on the outbound journey, if applicable. Otherwise empty string.)
+        - Fahrgemeinschaft Hinreise: (If part of a carpool for the outbound journey, state "Fahrgemeinschaft". Otherwise empty string.)
         - Sonstiges_Hinreise: (Any other relevant notes or costs for the outbound journey not covered by specific transport fields, e.g., "(Hin- und Rückflug)", "Taxi 25€")
-        - Bus_Bahn_Strassenbahn_Hinreise: (Cost for bus, tram, or local train travel on the outbound journey. Extract numerical value followed by currency symbol and any notes, e.g., "55,00€ (Parken)", do not put the flight cost here)
-        - planmäßige_Abfahrt: "(If the outbound journey's departure was scheduled on time, otherwise null).
-        - Schwerbeschädigt Hinreise: '(If the traveler is severely disabled for the outbound journey, otherwise null).
+        - Bus_Bahn_Strassenbahn_Hinreise: (Cost for bus, tram, or local train travel on the outbound journey. Extract numerical value followed by currency symbol and any notes, e.g., "67,00€ (Parken)", do not put the flight cost here)
+        - planmäßige_Abfahrt: "(If the outbound journey's departure was scheduled on time, otherwise empty string).
+        - Schwerbeschädigt Hinreise: '(If the traveler is severely disabled for the outbound journey, otherwise empty string).
         """
 
         print("\nSending requests to Gemini API for multiple documents (images and PDFs) in a single call...")
@@ -176,12 +169,6 @@ class hinreise:
                 parsed_response = json.loads(cleaned_response)
                 extracted_data = parsed_response[0] if parsed_response else {}
                 print(json.dumps(extracted_data, indent=2, ensure_ascii=False))
-                
-                if fill_pdf:
-                    print("\nFilling PDF form with extracted data...")
-                    templates_dir = os.path.join(os.path.dirname(__file__), "templates")
-                    filled_form_path = os.path.join(templates_dir, "filled_form.pdf")
-                    fillpdfs.write_fillable_pdf(filled_form_path, filled_form_path, extracted_data)
             except json.JSONDecodeError as e:
                 print(f"Error decoding JSON response: {e}")
                 print("Raw Gemini Response:")
@@ -193,32 +180,4 @@ class hinreise:
         self.extracted_data = extracted_data
         print("\nHinreise Processing complete.")
         
-        return extracted_data if not fill_pdf else None
-    
-    def fill_with_verified_data(self, verified_data: dict):
-        """
-        Fill PDF with user-verified data merged with original extracted data.
-        
-        The merge strategy:
-        - Start with ALL original extracted data (including costs)
-        - Override only the fields that were verified/edited by user
-        
-        Args:
-            verified_data: User-verified field values (only verifiable fields)
-        """
-        print("\nFilling PDF form with verified Hinreise data...")
-        
-        # Start with original extracted data (preserves costs and all other fields)
-        merged_data = dict(self.extracted_data) if hasattr(self, 'extracted_data') and self.extracted_data else {}
-        
-        # Override with verified values (only for verifiable fields)
-        for key, value in verified_data.items():
-            if value:  # Only override if user provided a value
-                merged_data[key] = value
-        
-        print(f"Merged data keys: {list(merged_data.keys())}")
-        
-        templates_dir = os.path.join(os.path.dirname(__file__), "templates")
-        filled_form_path = os.path.join(templates_dir, "filled_form.pdf")
-        fillpdfs.write_fillable_pdf(filled_form_path, filled_form_path, merged_data)
-        print("Hinreise verified data filled.")
+        return extracted_data

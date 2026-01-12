@@ -15,7 +15,6 @@ This ensures:
 - Deterministic, reproducible behavior
 """
 
-import json
 import os
 from typing import Optional, Dict, Any
 from fillpdf import fillpdfs
@@ -158,14 +157,6 @@ class antrag:
         antrag_kreditinstitut = pdf_dict.get("Kreditinstitut")
         antrag_bic = pdf_dict.get("BIC")
         antrag_iban = pdf_dict.get("IBAN")
-        
-        print(f"Prefill source summary:")
-        print(f"  Name: {'profile' if self.user_profile.has_value('full_name') else 'antrag'}")
-        print(f"  Email: {'profile' if self.user_profile.has_value('email') else 'antrag'}")
-        print(f"  Phone: {'profile' if self.user_profile.has_value('phone_number') else 'antrag'}")
-        print(f"  Address: {'profile' if self.user_profile.has_value('postal_address') else 'antrag'}")
-        print(f"  Institute: {'profile' if self.user_profile.has_value('institute') else 'antrag'}")
-        print(f"  Bank data: antrag (always - privacy requirement)")
         
         abrechnung_json = {
             "AntragstellerIn_Name_Vorname": prefilled_name,
