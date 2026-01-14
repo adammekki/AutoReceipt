@@ -85,7 +85,7 @@ class hotel:
 
     def get_gemini_vision_response_multi_doc(self, document_paths_list, prompt):
         """Send multiple documents to Gemini API with a prompt."""
-        model = genai.GenerativeModel('gemini-2.5-flash')
+        model = genai.GenerativeModel('gemini-3-flash-preview')
 
         contents = [prompt]
         all_image_parts = []
@@ -133,8 +133,22 @@ class hotel:
             self.extracted_data = {}
             return {}
 
-        # Gemini prompt for hotel/conference extraction
-        multi_doc_prompt = """
+        FIELD_NAMES = {
+            "geschaeftsort_am": "\u00fe\u00ff\u0000G\u0000e\u0000s\u0000c\u0000h\u0000\u00e4\u0000f\u0000t\u0000s\u0000o\u0000r\u0000t\u0000_\u0000a\u0000m",
+            "geschaeftsort_uhrzeit": "\u00fe\u00ff\u0000G\u0000e\u0000s\u0000c\u0000h\u0000\u00e4\u0000f\u0000t\u0000s\u0000o\u0000r\u0000t\u0000_\u0000U\u0000h\u0000r\u0000z\u0000e\u0000i\u0000t",
+            "dienstgeschaeft_am": "\u00fe\u00ff\u0000D\u0000i\u0000e\u0000n\u0000s\u0000t\u0000g\u0000e\u0000s\u0000c\u0000h\u0000\u00e4\u0000f\u0000t\u0000_\u0000a\u0000m",
+            "dienstgeschaeft_um": "\u00fe\u00ff\u0000D\u0000i\u0000e\u0000n\u0000s\u0000t\u0000g\u0000e\u0000s\u0000c\u0000h\u0000\u00e4\u0000f\u0000t\u0000_\u0000u\u0000m",
+            "ende_dienstgeschaeft_am": "\u00fe\u00ff\u0000E\u0000n\u0000d\u0000e\u0000_\u0000D\u0000i\u0000e\u0000n\u0000s\u0000t\u0000g\u0000e\u0000s\u0000c\u0000h\u0000\u00e4\u0000f\u0000t\u0000_\u0000a\u0000m",
+            "ende_dienstgeschaeft_um": "\u00fe\u00ff\u0000E\u0000n\u0000d\u0000e\u0000_\u0000D\u0000i\u0000e\u0000n\u0000s\u0000t\u0000g\u0000e\u0000s\u0000c\u0000h\u0000\u00e4\u0000f\u0000t\u0000_\u0000u\u0000m",
+            "kosten_unterkunft": "\u00fe\u00ff\u0000G\u0000e\u0000s\u0000c\u0000h\u0000\u00e4\u0000f\u0000t\u0000s\u0000k\u0000o\u0000r\u0000t\u0000_\u0000K\u0000o\u0000s\u0000t\u0000e\u0000n\u0000_\u0000U\u0000n\u0000t\u0000e\u0000r\u0000k\u0000u\u0000n\u0000f\u0000t",
+            "sonstige_kosten": "\u00fe\u00ff\u0000G\u0000e\u0000s\u0000c\u0000h\u0000\u00e4\u0000f\u0000t\u0000s\u0000k\u0000o\u0000r\u0000t\u0000_\u0000s\u0000o\u0000n\u0000s\u0000t\u0000i\u0000g\u0000e\u0000_\u0000K\u0000o\u0000s\u0000t\u0000e\u0000n",
+            "bus_geschaeftsort": "Bus Gesch\u00e4ftsort",
+            "fahrtkosten_bahn": "\u00fe\u00ff\u0000G\u0000e\u0000s\u0000c\u0000h\u0000\u00e4\u0000f\u0000t\u0000s\u0000k\u0000o\u0000r\u0000t\u0000_\u0000F\u0000a\u0000h\u0000r\u0000t\u0000k\u0000o\u0000s\u0000t\u0000e\u0000n\u0000_\u0000B\u0000a\u0000h\u0000n\u0000_\u0000S\u0000t\u0000r\u0000a\u0000\u00df\u0000e\u0000n\u0000b\u0000a\u0000h\u0000n",
+            "sonstige_geschaeftsort": "Sonstige Gesch\u00e4ftsort",
+            "fahrtkosten_sonstiges": "\u00fe\u00ff\u0000G\u0000e\u0000s\u0000c\u0000h\u0000\u00e4\u0000f\u0000t\u0000s\u0000k\u0000o\u0000r\u0000t\u0000_\u0000F\u0000a\u0000h\u0000r\u0000t\u0000k\u0000o\u0000s\u0000t\u0000e\u0000n\u0000_\u0000s\u0000o\u0000n\u0000s\u0000t\u0000i\u0000g\u0000e\u0000s",
+        }
+
+        multi_doc_prompt = rf"""
         You are an expert at extracting travel expense details from receipts. You will be provided with one or more document images (converted from original images or PDF pages). For each document, extract the following information and return it as a JSON object within a list. The JSON keys MUST exactly match the specified field names below. If a field cannot be found or is not applicable for a specific receipt, return its value as null for that receipt. For amounts, extract the numerical value followed by the currency symbol. If there are several documents, infer the data that is likely to be connected and merge them together into one output. Instead of using None, use empty string.
         Date format: DD.MM.YYYY
         Time format: HH:MM (24-hour format)
@@ -143,21 +157,19 @@ class hotel:
         Output format: A JSON list where each element is a JSON object representing one receipt's extracted data.
 
         Required Fields for the receipt:
-        - "þÿ\u0000G\u0000e\u0000s\u0000c\u0000h\u0000ä\u0000f\u0000t\u0000s\u0000o\u0000r\u0000t\u0000_\u0000a\u0000m": This is the date of arrival of the conference venue, here, put the date of arrival of the hotel.
-        - "þÿ\u0000G\u0000e\u0000s\u0000c\u0000h\u0000ä\u0000f\u0000t\u0000s\u0000o\u0000r\u0000t\u0000_\u0000U\u0000h\u0000r\u0000z\u0000e\u0000i\u0000t": This is the time of arrival of the conference venue, here, put the time of arrival of the hotel, or the check-in time for the hotel. If both are not available, put in 15:00.
-        - "þÿ\u0000D\u0000i\u0000e\u0000n\u0000s\u0000t\u0000g\u0000e\u0000s\u0000c\u0000h\u0000ä\u0000f\u0000t\u0000_\u0000a\u0000m": This is the start date of the conference.
-        - "þÿ\u0000D\u0000i\u0000e\u0000n\u0000s\u0000t\u0000g\u0000e\u0000s\u0000c\u0000h\u0000ä\u0000f\u0000t\u0000_\u0000u\u0000m": This is the start time of the conference.
-        - "þÿ\u0000E\u0000n\u0000d\u0000e\u0000_\u0000D\u0000i\u0000e\u0000n\u0000s\u0000t\u0000g\u0000e\u0000s\u0000c\u0000h\u0000ä\u0000f\u0000t\u0000_\u0000a\u0000m": This is the end date of the conference.
-        - "þÿ\u0000E\u0000n\u0000d\u0000e\u0000_\u0000D\u0000i\u0000e\u0000n\u0000s\u0000t\u0000g\u0000e\u0000s\u0000c\u0000h\u0000ä\u0000f\u0000t\u0000_\u0000u\u0000m": This is the end time of the conference.
-        - "þÿ\u0000G\u0000e\u0000s\u0000c\u0000h\u0000ä\u0000f\u0000t\u0000s\u0000o\u0000r\u0000t\u0000_\u0000K\u0000o\u0000s\u0000t\u0000e\u0000n\u0000_\u0000U\u0000n\u0000t\u0000e\u0000r\u0000k\u0000u\u0000n\u0000f\u0000t": This is the costs for accommodation including breakfast. If the room capacity is more than one person, divide the total cost by the number of persons to get the correct amount.
-        - "þÿ\u0000G\u0000e\u0000s\u0000c\u0000h\u0000ä\u0000f\u0000t\u0000s\u0000o\u0000r\u0000t\u0000_\u0000s\u0000o\u0000n\u0000s\u0000t\u0000i\u0000g\u0000e\u0000_\u0000K\u0000o\u0000s\u0000t\u0000e\u0000n": This is other costs (e.g. conference fee, parking fees...). This should be in euros, but if other currency is used, specify it. Make sure to specify the currency symbol of the amount.
-        - "Bus Geschäftsort": This is a checkbox field, if bus or tram (Straßenbahn) is used for business travel, put "ja", else put "nein" (no other options).
-        - "þÿ\u0000G\u0000e\u0000s\u0000c\u0000h\u0000ä\u0000f\u0000t\u0000s\u0000o\u0000r\u0000t\u0000_\u0000F\u0000a\u0000h\u0000r\u0000t\u0000k\u0000o\u0000s\u0000t\u0000e\u0000n\u0000_\u0000B\u0000a\u0000h\u0000n\u0000_\u0000S\u0000t\u0000r\u0000a\u0000ß\u0000e\u0000n\u0000b\u0000a\u0000h\u0000n": This is the costs for train or tram (Straßenbahn) tickets.
-        - "Sonstige Geschäftsort": This is a checkbox field, if other means of transport (e.g. taxi) is used for business travel, put "ja", else put "nein" (no other options).
-        - "þÿ\u0000G\u0000e\u0000s\u0000c\u0000h\u0000ä\u0000f\u0000t\u0000s\u0000o\u0000r\u0000t\u0000_\u0000F\u0000a\u0000h\u0000r\u0000t\u0000k\u0000o\u0000s\u0000t\u0000e\u0000n\u0000_\u0000s\u0000o\u0000n\u0000s\u0000t\u0000i\u0000g\u0000e\u0000s": This is the costs for other means of transport (e.g. taxi).
+        - "geschaeftsort_am": This is the date of arrival of the conference venue, here, put the date of arrival of the hotel.
+        - "geschaeftsort_uhrzeit": This is the time of arrival of the conference venue, here, put the time of arrival of the hotel, or the check-in time for the hotel. If both are not available, put in 15:00.
+        - "dienstgeschaeft_am": This is the start date of the conference.
+        - "dienstgeschaeft_um": This is the start time of the conference.
+        - "ende_dienstgeschaeft_am": This is the end date of the conference.
+        - "ende_dienstgeschaeft_um": This is the end time of the conference.
+        - "kosten_unterkunft": This is the costs for accommodation including breakfast (if included). If the room capacity is more than one person, divide the total cost by the number of persons to get the correct amount. THIS CANNOT BE LEFT EMPTY. This should have a euros currency symbol.
+        - "sonstige_kosten": This is other costs (e.g. conference fee, parking fees...). This should be in euros, but if other currency is used, specify it. Make sure to specify the currency symbol of the amount.
+        - "bus_geschaeftsort": This is a checkbox field, if bus or tram (Straßenbahn) is used for business travel, put "ja", else put "nein" (no other options).
+        - "fahrtkosten_bahn": This is the costs for train or tram (Straßenbahn) tickets.
+        - "sonstige_geschaeftsort": This is a checkbox field, if other means of transport (e.g. taxi) is used for business travel, put "ja", else put "nein" (no other options).
+        - "fahrtkosten_sonstiges": This is the costs for other means of transport (e.g. taxi).
         """
-
-        # Check that "ä" is accepted in the prompt, as in the terminal ä = e4
 
         print("\nSending requests to Gemini API for Hotel extraction...")
         gemini_response_text = self.get_gemini_vision_response_multi_doc(all_document_paths, multi_doc_prompt)
@@ -167,7 +179,16 @@ class hotel:
             cleaned_response = gemini_response_text.strip('```json\n').strip('\n```')
             try:
                 parsed_response = json.loads(cleaned_response)
-                self.extracted_data = parsed_response[0] if parsed_response else {}
+                gemini_data = parsed_response[0] if parsed_response else {}
+                print(json.dumps(gemini_data, indent=2, ensure_ascii=False))
+                
+                # Map Gemini's simple keys to the actual PDF field names
+                self.extracted_data = {}
+                for simple_key, pdf_key in FIELD_NAMES.items():
+                    if simple_key in gemini_data:
+                        self.extracted_data[pdf_key] = gemini_data[simple_key]
+                
+                print("\nMapped to PDF fields:")
                 print(json.dumps(self.extracted_data, indent=2, ensure_ascii=False))
                 
             except json.JSONDecodeError as e:

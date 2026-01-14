@@ -82,7 +82,7 @@ class ruckreise:
 
     def get_gemini_vision_response_multi_doc(self, document_paths_list, prompt):
         """Send multiple documents to Gemini API with a prompt."""
-        model = genai.GenerativeModel('gemini-2.5-flash')
+        model = genai.GenerativeModel('gemini-3-flash-preview')
 
         contents = [prompt]
         all_image_parts = []
@@ -131,8 +131,8 @@ class ruckreise:
             return {}
         
         context = context = ""
-        if self.hinreise_data:
-            context = f"{json.dumps(self.hinreise_data, ensure_ascii=False)}\n"
+        if self.response:
+            context = f"{json.dumps(self.response, ensure_ascii=False)}\n"
 
         multi_doc_prompt = rf"""
             You are an expert at extracting travel expense details from receipts. 

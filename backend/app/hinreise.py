@@ -8,7 +8,7 @@ from pdf2image import convert_from_path
 
 
 class hinreise:
-    def __init__(self, response, data_dir: str = "."):
+    def __init__(self, data_dir: str = "."):
         """
         Initialize hinreise with a response and data directory.
         
@@ -81,7 +81,7 @@ class hinreise:
 
     def get_gemini_vision_response_multi_doc(self, document_paths_list, prompt):
         """Send multiple documents to Gemini API with a prompt."""
-        model = genai.GenerativeModel('gemini-2.5-flash')
+        model = genai.GenerativeModel('gemini-3-flash-preview')
 
         contents = [prompt]
         all_image_parts = []
