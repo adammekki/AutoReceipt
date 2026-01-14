@@ -1,22 +1,25 @@
 import os
 import io
 import json
+from typing import List, Optional
 import google.generativeai as genai
 from dotenv import load_dotenv
 from PIL import Image
 from pdf2image import convert_from_path
 
 class ruckreise:
-    def __init__(self, response, data_dir: str = "."):
+    def __init__(self, response, data_dir: str = ".", cached_image_parts: Optional[List] = None):
         """
         Initialize ruckreise with a response and data directory.
         
         Args:
             response: Response from hinreise processing
             data_dir: Directory where PDF files are located
+            cached_image_parts: Pre-converted image parts from hinreise (optional)
         """
         self.response = response
         self.data_dir = data_dir
+        self.cached_image_parts = cached_image_parts or []
         self.extracted_data = {}  # Will be populated by main()
         self._setup_gemini()
 
@@ -80,23 +83,26 @@ class ruckreise:
 
         return gemini_image_parts
 
-    def get_gemini_vision_response_multi_doc(self, document_paths_list, prompt):
-        """Send multiple documents to Gemini API with a prompt."""
+    def get_gemini_vision_response(self, image_parts, prompt):
+        """
+        Send prepared image parts to Gemini API with a prompt.
+        
+        Args:
+            image_parts: Pre-prepared Gemini-compatible image parts
+            prompt: The prompt to send
+            
+        Returns:
+            str: Gemini response text
+        """
         model = genai.GenerativeModel('gemini-3-flash-preview')
 
         contents = [prompt]
-        all_image_parts = []
 
-        for doc_path in document_paths_list:
-            prepared_parts = self.prepare_document_for_gemini(doc_path)
-            all_image_parts.extend(prepared_parts)
-
-        if not all_image_parts:
-            print("No valid images could be prepared from the provided documents. Sending only prompt.")
-            if len(contents) == 1:
-                return None
+        if not image_parts:
+            print("No valid images provided. Sending only prompt.")
+            return None
             
-        contents.extend(all_image_parts)
+        contents.extend(image_parts)
 
         try:
             response = model.generate_content(contents)
@@ -108,29 +114,47 @@ class ruckreise:
     def main(self):
         """
         Main execution block for ruckreise processing.
+        Reuses cached image parts from hinreise if available.
         
         Returns:
             dict: Extracted data
         """
-        # Gather all supported files from the data directory dynamically
-        allowed_exts = {'.pdf', '.jpg', '.jpeg', '.png', '.gif', '.bmp', '.tiff'}
-        all_document_paths = []
-        if not os.path.isdir(self.data_dir):
-            print(f"Data directory not found: {self.data_dir}")
+        # Use cached image parts if available, otherwise prepare from scratch
+        if self.cached_image_parts:
+            print("\nReusing cached image parts from Hinreise processing...")
+            image_parts = self.cached_image_parts
         else:
-            for entry in sorted(os.listdir(self.data_dir)):
-                path = os.path.join(self.data_dir, entry)
-                if os.path.isfile(path):
-                    ext = os.path.splitext(entry)[1].lower()
-                    if ext in allowed_exts:
-                        all_document_paths.append(path)
+            print("\nNo cached images available, preparing documents...")
+            # Gather all supported files from the data directory dynamically
+            allowed_exts = {'.pdf', '.jpg', '.jpeg', '.png', '.gif', '.bmp', '.tiff'}
+            all_document_paths = []
+            if not os.path.isdir(self.data_dir):
+                print(f"Data directory not found: {self.data_dir}")
+            else:
+                for entry in sorted(os.listdir(self.data_dir)):
+                    path = os.path.join(self.data_dir, entry)
+                    if os.path.isfile(path):
+                        ext = os.path.splitext(entry)[1].lower()
+                        if ext in allowed_exts:
+                            all_document_paths.append(path)
 
-        if not all_document_paths:
-            print(f"No supported documents found in {self.data_dir}")
+            if not all_document_paths:
+                print(f"No supported documents found in {self.data_dir}")
+                self.extracted_data = {}
+                return {}
+            
+            # Prepare documents
+            image_parts = []
+            for doc_path in all_document_paths:
+                prepared_parts = self.prepare_document_for_gemini(doc_path)
+                image_parts.extend(prepared_parts)
+
+        if not image_parts:
+            print("No valid images available for processing.")
             self.extracted_data = {}
             return {}
         
-        context = context = ""
+        context = ""
         if self.response:
             context = f"{json.dumps(self.response, ensure_ascii=False)}\n"
 
@@ -180,8 +204,8 @@ class ruckreise:
         """
 
 
-        print("\nSending requests to Gemini API for Rückreise extraction...")
-        gemini_response_text = self.get_gemini_vision_response_multi_doc(all_document_paths, multi_doc_prompt)
+        print("\nSending request to Gemini API for Rückreise extraction...")
+        gemini_response_text = self.get_gemini_vision_response(image_parts, multi_doc_prompt)
 
         extracted_data = {}
         if gemini_response_text:
