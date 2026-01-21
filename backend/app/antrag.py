@@ -32,11 +32,12 @@ class UserProfile:
     def __init__(self, data: Optional[Dict[str, Any]] = None):
         if data is None:
             data = {}
-        self.full_name: str = data.get('full_name', '').strip()
-        self.phone_number: str = data.get('phone_number', '').strip()
-        self.email: str = data.get('email', '').strip()
-        self.postal_address: str = data.get('postal_address', '').strip()
-        self.institute: str = data.get('institute', '').strip()
+        # Use (value or '') to handle None values in the dict, then strip
+        self.full_name: str = (data.get('full_name') or '').strip()
+        self.phone_number: str = (data.get('phone_number') or '').strip()
+        self.email: str = (data.get('email') or '').strip()
+        self.postal_address: str = (data.get('postal_address') or '').strip()
+        self.institute: str = (data.get('institute') or '').strip()
     
     def has_value(self, field: str) -> bool:
         """Check if a field has a non-empty value."""
@@ -158,6 +159,10 @@ class antrag:
         antrag_bic = pdf_dict.get("BIC")
         antrag_iban = pdf_dict.get("IBAN")
         
+        # Safely get optional fields with empty string fallback to avoid TypeError
+        kostenstelle = pdf_dict.get("Kostenstelle") or ""
+        datum_6 = pdf_dict.get("Datum_6") or ""
+        
         abrechnung_json = {
             "AntragstellerIn_Name_Vorname": prefilled_name,
             "E-Mail-dienstlich": prefilled_email,
@@ -168,8 +173,8 @@ class antrag:
             "BIC": antrag_bic,
             "BAN": antrag_iban,
             "Tagegeld": "nein",
-            "Drittmittelprojekt": "P" + pdf_dict.get("Kostenstelle"),
-            "Genehmigung_der_Dienstreise_am__von": pdf_dict.get("Datum_6") + " ",
+            "Drittmittelprojekt": "P" + kostenstelle,
+            "Genehmigung_der_Dienstreise_am__von": datum_6 + " ",
         }
 
         # If supervisor_name is provided, override it

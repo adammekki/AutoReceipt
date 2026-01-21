@@ -199,24 +199,32 @@ async def extract_trip(
             print("Starting Antrag extraction...")
             antrag_instance = antrag(data_dir=temp_dir, user_profile=parsed_user_profile)
             antrag_instance.main()
+            print("Antrag extraction completed successfully.")
             
             # # Step 2: Hinreise extraction (without PDF fill) - uses flight receipts only
             print("Starting Hinreise extraction...")
             hinreise_instance = hinreise(data_dir=flight_dir)
             hinreise_data = hinreise_instance.main()
+            print("Hinreise extraction completed successfully.")
             
             # # Step 3: Ruckreise extraction (without PDF fill) - uses flight receipts only
             print("Starting Ruckreise extraction...")
             ruckreise_instance = ruckreise(hinreise_instance.response, data_dir=flight_dir)
             ruckreise_data = ruckreise_instance.main()
+            print("Ruckreise extraction completed successfully.")
             
             # Step 4: Hotel extraction (without PDF fill) - uses hotel receipts only
             print("Starting Hotel extraction...")
             hotel_instance = hotel(data_dir=hotel_dir)
             hotel_data = hotel_instance.main()
+            print("Hotel extraction completed successfully.")
             
         except Exception as e:
-            # Clean up on error
+            # Clean up on error - print full traceback for debugging
+            import traceback
+            print(f"ERROR in extraction pipeline: {str(e)}")
+            print("Full traceback:")
+            traceback.print_exc()
             shutil.rmtree(temp_dir, ignore_errors=True)
             errors.append(f"Pipeline processing error: {str(e)}")
             return ExtractedDataResponse(

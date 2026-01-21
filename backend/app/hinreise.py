@@ -173,8 +173,10 @@ class hinreise:
                 print(f"Error decoding JSON response: {e}")
                 print("Raw Gemini Response:")
                 print(gemini_response_text)
+                extracted_data = {}
         else:
             print("\nFailed to get a response from Gemini API.")
+            extracted_data = {}
 
         self.response = gemini_response_text
         self.extracted_data = extracted_data
