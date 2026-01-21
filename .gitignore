@@ -53,18 +53,6 @@ backend/output/
 filled_form.pdf
 example_reimbursement.pdf
 
-# Uploaded PDF files (sensitive data)
-Receipt_Flight1.pdf
-Receipt_Flight2.pdf
-Receipt_Flight3.pdf
-Receipt_Parking.pdf
-Reisekostenabrechnung_28_05_2024.pdf
-Dienstreiseantrag_11_12_2023_V2.pdf
-Payment_Conference.pdf
-Payment_Parking.pdf
-Receipt_Conference.pdf
-Receipt_Hotel(6persons).pdf
-
 # Next.js
 frontend/.next/
 frontend/out/
