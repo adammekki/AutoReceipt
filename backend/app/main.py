@@ -201,15 +201,19 @@ async def extract_trip(
             antrag_instance.main()
             print("Antrag extraction completed successfully.")
             
-            # # Step 2: Hinreise extraction (without PDF fill) - uses flight receipts only
+            # Step 2: Hinreise extraction (without PDF fill) - uses flight receipts only
             print("Starting Hinreise extraction...")
             hinreise_instance = hinreise(data_dir=flight_dir)
             hinreise_data = hinreise_instance.main()
             print("Hinreise extraction completed successfully.")
             
-            # # Step 3: Ruckreise extraction (without PDF fill) - uses flight receipts only
+            # Step 3: Ruckreise extraction (without PDF fill) - reuses cached images from hinreise
             print("Starting Ruckreise extraction...")
-            ruckreise_instance = ruckreise(hinreise_instance.response, data_dir=flight_dir)
+            ruckreise_instance = ruckreise(
+                hinreise_instance.response, 
+                data_dir=flight_dir,
+                cached_image_parts=hinreise_instance.cached_image_parts
+            )
             ruckreise_data = ruckreise_instance.main()
             print("Ruckreise extraction completed successfully.")
             

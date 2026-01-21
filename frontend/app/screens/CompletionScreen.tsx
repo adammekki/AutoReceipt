@@ -31,6 +31,11 @@ export default function CompletionScreen() {
       // Cleanup
       window.URL.revokeObjectURL(url);
       document.body.removeChild(a);
+      
+      // Auto-redirect to landing after successful download
+      setTimeout(() => {
+        resetApp();
+      }, 1500);
     } catch (err) {
       console.error('Download error:', err);
       setDownloadError(err instanceof Error ? err.message : 'Download failed');

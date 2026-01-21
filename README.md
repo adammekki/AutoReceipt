@@ -195,7 +195,7 @@ GET /api/download/Reisekostenabrechnung_ausgefuellt.pdf
 |-----------|------------|
 | Backend | FastAPI (Python) |
 | Frontend | Next.js (React/TypeScript) |
-| AI Model | Google Gemini 2.5 Flash |
+| AI Model | Google Gemini 3 Flash Preview|
 | PDF Processing | fillpdf, pdf2image, PyMuPDF |
 | Image Processing | Pillow (PIL) |
 | PDF Rendering | Poppler |

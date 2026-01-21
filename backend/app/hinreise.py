@@ -10,13 +10,14 @@ from pdf2image import convert_from_path
 class hinreise:
     def __init__(self, data_dir: str = "."):
         """
-        Initialize hinreise with a response and data directory.
+        Initialize hinreise with a data directory.
         
         Args:
             data_dir: Directory where PDF files are located
         """
         self.data_dir = data_dir
         self.extracted_data = {}  # Will be populated by main()
+        self.cached_image_parts = []  # Cache converted images for reuse by ruckreise
         self._setup_gemini()
     
     def _setup_gemini(self):
@@ -79,23 +80,45 @@ class hinreise:
 
         return gemini_image_parts
 
-    def get_gemini_vision_response_multi_doc(self, document_paths_list, prompt):
-        """Send multiple documents to Gemini API with a prompt."""
-        model = genai.GenerativeModel('gemini-3-flash-preview')
-
-        contents = [prompt]
+    def prepare_all_documents(self, document_paths_list):
+        """
+        Prepare all documents and cache the image parts for reuse.
+        
+        Args:
+            document_paths_list: List of paths to documents
+            
+        Returns:
+            list: All prepared image parts
+        """
         all_image_parts = []
-
         for doc_path in document_paths_list:
             prepared_parts = self.prepare_document_for_gemini(doc_path)
             all_image_parts.extend(prepared_parts)
+        
+        # Cache for reuse by ruckreise
+        self.cached_image_parts = all_image_parts
+        return all_image_parts
 
-        if not all_image_parts:
-            print("No valid images could be prepared from the provided documents. Sending only prompt.")
-            if len(contents) == 1:
-                return None
+    def get_gemini_vision_response(self, image_parts, prompt):
+        """
+        Send prepared image parts to Gemini API with a prompt.
+        
+        Args:
+            image_parts: Pre-prepared Gemini-compatible image parts
+            prompt: The prompt to send
             
-        contents.extend(all_image_parts)
+        Returns:
+            str: Gemini response text
+        """
+        model = genai.GenerativeModel('gemini-3-flash-preview')
+
+        contents = [prompt]
+
+        if not image_parts:
+            print("No valid images provided. Sending only prompt.")
+            return None
+            
+        contents.extend(image_parts)
 
         try:
             response = model.generate_content(contents)
@@ -129,6 +152,17 @@ class hinreise:
             print(f"No supported documents found in {self.data_dir}")
             self.extracted_data = {}
             self.response = None
+            self.cached_image_parts = []
+            return {}
+
+        # Prepare all documents and cache for reuse by ruckreise
+        print("\nPreparing documents for Gemini API...")
+        image_parts = self.prepare_all_documents(all_document_paths)
+        
+        if not image_parts:
+            print("No valid images could be prepared from the provided documents.")
+            self.extracted_data = {}
+            self.response = None
             return {}
 
         multi_doc_prompt = """
@@ -158,8 +192,8 @@ class hinreise:
         - Schwerbeschädigt Hinreise: '(If the traveler is severely disabled for the outbound journey, otherwise empty string).
         """
 
-        print("\nSending requests to Gemini API for multiple documents (images and PDFs) in a single call...")
-        gemini_response_text = self.get_gemini_vision_response_multi_doc(all_document_paths, multi_doc_prompt)
+        print("\nSending request to Gemini API for Hinreise extraction...")
+        gemini_response_text = self.get_gemini_vision_response(image_parts, multi_doc_prompt)
 
         extracted_data = {}
         if gemini_response_text:
